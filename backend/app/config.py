@@ -25,7 +25,9 @@ DEMUCS_MODEL = "htdemucs"
 DEMUCS_STEM = "vocals"
 DEMUCS_MPS_DEVICE = "mps"
 DEMUCS_CPU_DEVICE = "cpu"
-DEMUCS_SEGMENT_SECONDS = 12
+# htdemucs 是 Transformer 模型，分段不能超過訓練長度 7.8 秒；
+# 不傳 --segment，讓 demucs 自動使用模型預設值。
+DEMUCS_SEGMENT_SECONDS = None
 
 TOTAL_JOB_STEPS = 5
 JOB_STEPS = ("fetch", "separate", "transcribe", "subtitles", "finalize")

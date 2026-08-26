@@ -13,7 +13,6 @@ from app.config import (
     DEMUCS_CPU_DEVICE,
     DEMUCS_MODEL,
     DEMUCS_MPS_DEVICE,
-    DEMUCS_SEGMENT_SECONDS,
     DEMUCS_STEM,
     VENV_PYTHON,
 )
@@ -62,8 +61,6 @@ def _run_demucs(
         "-m",
         "demucs",
         f"--two-stems={DEMUCS_STEM}",
-        "--segment",
-        str(DEMUCS_SEGMENT_SECONDS),
         "-d",
         device,
         "-o",
@@ -136,6 +133,7 @@ def separate_vocals(
     output_instrumental = song_dir / "instrumental.wav"
     shutil.copy2(vocals, output_vocals)
     shutil.copy2(instrumental, output_instrumental)
+    shutil.rmtree(work_dir, ignore_errors=True)
     if on_progress:
         on_progress(1.0, "人聲與伴奏分離完成")
 

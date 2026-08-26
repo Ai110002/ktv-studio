@@ -168,6 +168,8 @@ class Pipeline:
             (song_dir / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
             await self.job_manager.complete(job_id, "處理完成，可以開始錄唱")
         except (DownloadError, SeparationError, TranscriptionError, PipelineError) as exc:
+            shutil.rmtree(song_dir, ignore_errors=True)
             raise PipelineError(str(exc)) from exc
         except Exception as exc:
+            shutil.rmtree(song_dir, ignore_errors=True)
             raise PipelineError(f"處理歌曲時發生錯誤：{exc}") from exc

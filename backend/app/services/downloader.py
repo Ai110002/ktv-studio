@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import re
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -24,6 +25,7 @@ _TIMESTAMP_RE = re.compile(
     r"(?P<end>\d{1,2}:\d{2}:\d{2}[.,]\d{3}|\d{1,2}:\d{2}[.,]\d{3})"
 )
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
+_PUNCTUATION_RE = re.compile(r"[\s、。！？!?,，．…：；「」『』（）()\[\]【】〈〉《》・—ー〜～\-]+")
 
 
 @dataclass(frozen=True)
@@ -45,9 +47,13 @@ def _timestamp_to_seconds(value: str) -> float:
 
 
 def parse_vtt(vtt_content: str) -> list[dict[str, Any]]:
-    """解析 WebVTT，清除 HTML 標記並合併連續的重複字幕。"""
+    """解析 WebVTT，處理 YouTube 自動字幕的滾動式重複內容。
 
-    lines: list[dict[str, Any]] = []
+    YouTube 自動字幕每一條 cue 會重複前一段文字（rolling captions），
+    這裡會合併成連續的完整句子，並移除與前一行重疊的尾巴。
+    """
+
+    cues: list[dict[str, Any]] = []
     active_start: float | None = None
     active_end: float | None = None
     text_parts: list[str] = []
@@ -59,10 +65,7 @@ def parse_vtt(vtt_content: str) -> list[dict[str, Any]]:
             return
         text = clean_subtitle_text(html.unescape(_HTML_TAG_RE.sub("", " ".join(text_parts))))
         if text:
-            if lines and lines[-1]["text"] == text and active_start - lines[-1]["end"] <= 0.25:
-                lines[-1]["end"] = round(active_end, 3)
-            else:
-                lines.append({"start": round(active_start, 3), "end": round(active_end, 3), "text": text})
+            cues.append({"start": round(active_start, 3), "end": round(active_end, 3), "text": text})
         active_start = None
         active_end = None
         text_parts = []
@@ -82,7 +85,71 @@ def parse_vtt(vtt_content: str) -> list[dict[str, Any]]:
             text_parts.append(line)
 
     flush()
+
+    lines: list[dict[str, Any]] = []
+    current: dict[str, Any] | None = None
+    rolled = False
+
+    def commit() -> None:
+        nonlocal current, rolled
+        if current is None:
+            return
+        prev_text = lines[-1]["text"] if lines else ""
+        text = current["text"]
+        if rolled:
+            text = _strip_overlap(prev_text, text)
+        text = _strip_edge_punctuation(text)
+        if text:
+            start = max(current["start"], lines[-1]["end"]) if lines else current["start"]
+            end = max(current["end"], start)
+            lines.append({"start": round(start, 3), "end": round(end, 3), "text": text})
+        current = None
+        rolled = False
+
+    for cue in cues:
+        if current is not None and (
+            cue["text"].startswith(current["text"])
+            or (len(cue["text"]) < len(current["text"]) and current["text"].endswith(cue["text"]))
+        ):
+            rolled = True
+            current["end"] = max(current["end"], cue["end"])
+            if len(cue["text"]) > len(current["text"]):
+                current["text"] = cue["text"]
+        else:
+            commit()
+            current = dict(cue)
+
+    commit()
     return lines
+
+
+def _strip_overlap(prev_text: str, text: str) -> str:
+    """移除滾動字幕中與前一行重複的尾巴（忽略標點與空白）。"""
+
+    if not prev_text:
+        return text
+    previous = _PUNCTUATION_RE.sub("", prev_text)
+    current = _PUNCTUATION_RE.sub("", text)
+    overlap = 0
+    for length in range(min(len(previous), len(current)), 0, -1):
+        if current[:length] == previous[-length:]:
+            overlap = length
+            break
+    if overlap == 0:
+        return text
+    count = 0
+    for index, char in enumerate(text):
+        if not _PUNCTUATION_RE.match(char):
+            count += 1
+        if count >= overlap:
+            return text[index + 1 :]
+    return text
+
+
+def _strip_edge_punctuation(text: str) -> str:
+    """移除行首行尾的標點與空白，保留行內標點（歌詞語氣需要）。"""
+
+    return text.strip(" \u3000\t、。！？!?,，．…：；「」『』（）()[]【】〈〉《》・—ー〜～-♪♫")
 
 
 def _subtitle_languages(language_hint: str | None) -> list[str]:
@@ -98,44 +165,55 @@ def _subtitle_languages(language_hint: str | None) -> list[str]:
 
 
 def _download_subtitles(url: str, directory: Path, language_hint: str | None) -> tuple[list[dict[str, Any]] | None, str]:
-    """盡量取得手動或自動 VTT 字幕；取得不到時不視為下載失敗。"""
+    """逐語言盡量取得手動或自動 VTT 字幕；個別語言失敗不影響其他語言。
 
-    subtitle_template = str(directory / "subtitle.%(ext)s")
-    options: dict[str, Any] = {
-        "skip_download": True,
-        "writesubtitles": True,
-        "writeautomaticsub": True,
-        "subtitleslangs": _subtitle_languages(language_hint),
-        "subtitlesformat": "vtt",
-        "outtmpl": subtitle_template,
-        "noplaylist": True,
-        "quiet": True,
-        "no_warnings": True,
-        "overwrites": True,
-    }
-    try:
-        with yt_dlp.YoutubeDL(options) as downloader:
-            downloader.extract_info(url, download=True)
-    except Exception:
-        return None, normalize_language(language_hint)
+    YouTube 對字幕端點有限流（HTTP 429），因此一次只請求一種語言，
+    429 時短暫等待重試一次；全部失敗時回傳 (None, hint)。
+    """
 
-    candidates = sorted(directory.glob("subtitle*.vtt"))
-    best_lines: list[dict[str, Any]] | None = None
-    best_language = normalize_language(language_hint)
-    for candidate in candidates:
+    collected: list[tuple[list[dict[str, Any]], str]] = []
+    for language in _subtitle_languages(language_hint):
+        subtitle_template = str(directory / "subtitle.%(ext)s")
+        options: dict[str, Any] = {
+            "skip_download": True,
+            "writesubtitles": True,
+            "writeautomaticsub": True,
+            "subtitleslangs": [language],
+            "subtitlesformat": "vtt",
+            "outtmpl": subtitle_template,
+            "noplaylist": True,
+            "quiet": True,
+            "no_warnings": True,
+            "overwrites": True,
+            "retries": 2,
+        }
         try:
-            parsed = parse_vtt(candidate.read_text(encoding="utf-8", errors="replace"))
-        except OSError:
-            continue
-        if not best_lines or len(parsed) > len(best_lines):
-            best_lines = parsed
-            name_parts = candidate.stem.split(".")
-            if len(name_parts) > 1:
-                best_language = normalize_language(name_parts[-1])
+            with yt_dlp.YoutubeDL(options) as downloader:
+                downloader.extract_info(url, download=True)
+        except Exception as exc:
+            if "429" in str(exc):
+                time.sleep(3)  # 限流時稍候再試一次
+                try:
+                    with yt_dlp.YoutubeDL(options) as downloader:
+                        downloader.extract_info(url, download=True)
+                except Exception:
+                    continue
+            else:
+                continue
 
-    if best_lines and len(best_lines) >= 3:
-        return best_lines, best_language
-    return None, normalize_language(language_hint)
+        candidates = sorted(directory.glob(f"subtitle.{language}*.vtt"))
+        for candidate in candidates:
+            try:
+                parsed = parse_vtt(candidate.read_text(encoding="utf-8", errors="replace"))
+            except OSError:
+                continue
+            if parsed and len(parsed) >= 3:
+                collected.append((parsed, normalize_language(language)))
+
+    if not collected:
+        return None, normalize_language(language_hint)
+    best_lines, best_language = max(collected, key=lambda item: len(item[0]))
+    return best_lines, best_language
 
 
 def _find_downloaded_audio(directory: Path, expected_name: str | None) -> Path | None:
