@@ -29,6 +29,7 @@ export default function SongCard({ song, onOpen, onDelete, deleting = false }: S
             <span className="mt-1 block truncate text-sm text-slate-400">{song.artist || '未知歌手'}</span>
             <span className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
               <span className="rounded-md bg-slate-800 px-2 py-1 text-slate-300">{languageLabel[song.language] || song.language}</span>
+              {song.has_cover_video && <span className="rounded-md bg-slate-800 px-2 py-1 text-slate-300">🎬 有影片</span>}
               <span className="inline-flex items-center gap-1"><Clock3 size={12} />{formatDuration(song.duration)}</span>
               <span className="inline-flex items-center gap-1">
                 {song.source_type === 'youtube' ? <Youtube size={13} /> : <Disc3 size={13} />}

@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 from app.config import SONGS_DIR, STATIC_DIR, UPLOAD_DIR, ensure_data_directories
 from app.jobs import JobManager
 from app.pipeline import Pipeline
-from app.services.audio import AudioError, convert_to_mp3
+from app.services.audio import AudioError, convert_to_mp3, convert_to_mp4
 
 
 class CreateJobRequest(BaseModel):
@@ -85,6 +85,7 @@ def _song_response(meta: dict[str, Any], song_dir: Path) -> dict[str, Any]:
     result["files"] = files
     result["status"] = "ready" if (song_dir / files.get("instrumental", "")).is_file() else "incomplete"
     result["has_cover"] = (song_dir / files.get("cover", "cover.mp3")).is_file()
+    result["has_cover_video"] = (song_dir / files.get("cover_video", "cover.mp4")).is_file()
     return result
 
 
@@ -171,7 +172,7 @@ async def get_song(song_id: str) -> dict[str, Any]:
 
 
 @app.get("/api/songs/{song_id}/audio/{kind}")
-async def stream_audio(song_id: str, kind: Literal["original", "vocals", "instrumental", "cover"]) -> FileResponse:
+async def stream_audio(song_id: str, kind: Literal["original", "vocals", "instrumental", "cover", "cover_video"]) -> FileResponse:
     song_dir, meta = _song_meta(song_id)
     filename = str((meta.get("files") or {}).get(kind) or "")
     if not filename or Path(filename).name != filename:
@@ -220,6 +221,38 @@ async def export_cover(
         temporary.unlink(missing_ok=True)
         await recording.close()
     return {"url": f"/api/songs/{song_id}/audio/cover", "filename": "cover.mp3"}
+
+
+@app.post("/api/songs/{song_id}/export-video")
+async def export_cover_video(
+    song_id: str,
+    recording: Annotated[UploadFile, File(...)],
+) -> dict[str, str]:
+    """將瀏覽器錄製的 Cover 影片轉為可下載的 MP4。"""
+
+    song_dir, meta = _song_meta(song_id)
+    suffix = Path(recording.filename or "recording.webm").suffix.lower()
+    if not re.fullmatch(r"\.[a-z0-9]{1,8}", suffix):
+        suffix = ".webm"
+    temporary = song_dir / f".video-recording-{uuid.uuid4().hex}{suffix}"
+    output = song_dir / "cover.mp4"
+    try:
+        with temporary.open("wb") as handle:
+            while chunk := await recording.read(1024 * 1024):
+                handle.write(chunk)
+        await asyncio.to_thread(convert_to_mp4, temporary, output)
+        files = dict(meta.get("files") or {})
+        files["cover_video"] = "cover.mp4"
+        meta["files"] = files
+        (song_dir / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    except AudioError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail="儲存或匯出錄影檔失敗") from exc
+    finally:
+        temporary.unlink(missing_ok=True)
+        await recording.close()
+    return {"url": f"/api/songs/{song_id}/audio/cover_video", "filename": "cover.mp4"}
 
 
 @app.delete("/api/songs/{song_id}")

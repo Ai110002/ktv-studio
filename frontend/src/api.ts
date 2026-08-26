@@ -24,6 +24,7 @@ export interface SongFiles {
   vocals: string
   instrumental: string
   cover: string
+  cover_video?: string
 }
 
 export interface Song {
@@ -38,6 +39,7 @@ export interface Song {
   files: SongFiles
   status: 'ready' | 'incomplete'
   has_cover: boolean
+  has_cover_video: boolean
 }
 
 export interface SubtitleWord {
@@ -134,6 +136,15 @@ export async function exportRecording(songId: string, blob: Blob) {
   body.append('recording', blob, '錄音.webm')
   return request<{ url: string; filename: string }>(
     `/api/songs/${encodeURIComponent(songId)}/export`,
+    { method: 'POST', body },
+  )
+}
+
+export async function exportVideo(songId: string, blob: Blob) {
+  const body = new FormData()
+  body.append('recording', blob, 'cover錄影.webm')
+  return request<{ url: string; filename: string }>(
+    `/api/songs/${encodeURIComponent(songId)}/export-video`,
     { method: 'POST', body },
   )
 }

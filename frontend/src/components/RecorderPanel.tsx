@@ -1,112 +1,28 @@
 import { Circle, Download, LoaderCircle, Mic, MicOff, Square, Volume2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { exportRecording } from '../api'
-import type { AudioEngine } from './AudioEngine'
+import { useMicrophone, type AudioEngine } from './AudioEngine'
 
 interface RecorderPanelProps {
   songId: string
   engine: AudioEngine | null
+  recordingLocked: boolean
 }
 
-interface MicChain {
-  stream: MediaStream
-  source: MediaStreamAudioSourceNode
-  analyser: AnalyserNode
-  gain: GainNode
-  frame: number
-}
-
-function microphoneError(error: unknown): string {
-  if (error instanceof DOMException && ['NotAllowedError', 'SecurityError'].includes(error.name)) {
-    return '麥克風權限被拒絕。請在瀏覽器網站設定中允許此網站使用麥克風後再試。'
-  }
-  if (error instanceof DOMException && error.name === 'NotFoundError') {
-    return '找不到可用的麥克風，請確認裝置已連接。'
-  }
-  return error instanceof Error ? `無法啟用麥克風：${error.message}` : '無法啟用麥克風。'
-}
-
-export default function RecorderPanel({ songId, engine }: RecorderPanelProps) {
-  const micChainRef = useRef<MicChain | null>(null)
+export default function RecorderPanel({ songId, engine, recordingLocked }: RecorderPanelProps) {
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
-  const [micReady, setMicReady] = useState(false)
-  const [micLevel, setMicLevel] = useState(0)
-  const [micVolume, setMicVolume] = useState(1)
+  const { micReady, micLevel, micVolume, setMicVolume, enable, release, error: microphoneIssue } = useMicrophone(engine)
   const [recording, setRecording] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [exportUrl, setExportUrl] = useState<string | null>(null)
   const [error, setError] = useState('')
 
-  const releaseMicrophone = () => {
-    const chain = micChainRef.current
-    if (!chain) return
-    window.cancelAnimationFrame(chain.frame)
-    chain.source.disconnect()
-    chain.analyser.disconnect()
-    chain.gain.disconnect()
-    chain.stream.getTracks().forEach((track) => track.stop())
-    micChainRef.current = null
-    setMicReady(false)
-    setMicLevel(0)
-  }
-
   useEffect(() => {
     return () => {
       if (recorderRef.current?.state === 'recording') recorderRef.current.stop()
-      releaseMicrophone()
     }
-    // 音訊引擎改變時，舊的麥克風節點不能繼續連到已關閉的 destination。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engine])
-
-  const enableMicrophone = async (): Promise<MicChain | null> => {
-    if (!engine) {
-      setError('音訊引擎尚未準備完成，請稍候再試。')
-      return null
-    }
-    if (micChainRef.current) return micChainRef.current
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setError('此瀏覽器不支援麥克風錄音。')
-      return null
-    }
-
-    try {
-      await engine.resume()
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false },
-      })
-      const source = engine.context.createMediaStreamSource(stream)
-      const analyser = engine.context.createAnalyser()
-      analyser.fftSize = 256
-      const gain = engine.context.createGain()
-      gain.gain.value = micVolume
-      source.connect(analyser)
-      analyser.connect(gain)
-      gain.connect(engine.recordDestination)
-
-      const samples = new Uint8Array(analyser.fftSize)
-      const chain: MicChain = { stream, source, analyser, gain, frame: 0 }
-      const measure = () => {
-        analyser.getByteTimeDomainData(samples)
-        let sum = 0
-        for (const sample of samples) {
-          const value = (sample - 128) / 128
-          sum += value * value
-        }
-        setMicLevel(Math.min(1, Math.sqrt(sum / samples.length) * 3.5))
-        chain.frame = window.requestAnimationFrame(measure)
-      }
-      chain.frame = window.requestAnimationFrame(measure)
-      micChainRef.current = chain
-      setMicReady(true)
-      setError('')
-      return chain
-    } catch (micError) {
-      setError(microphoneError(micError))
-      return null
-    }
-  }
 
   const finishRecording = async (mimeType: string) => {
     const chunks = chunksRef.current
@@ -131,17 +47,18 @@ export default function RecorderPanel({ songId, engine }: RecorderPanelProps) {
     if (!engine) return
     setError('')
     setExportUrl(null)
-    const chain = await enableMicrophone()
-    if (!chain || !window.MediaRecorder) {
+    const micEnabled = await enable()
+    if (!micEnabled || !window.MediaRecorder) {
       if (!window.MediaRecorder) setError('此瀏覽器不支援 MediaRecorder 錄音。')
       return
     }
     try {
       await engine.resume()
       const supportedMime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((type) => MediaRecorder.isTypeSupported(type))
+      const stream = engine.getRecordStream()
       const recorder = supportedMime
-        ? new MediaRecorder(engine.recordDestination.stream, { mimeType: supportedMime })
-        : new MediaRecorder(engine.recordDestination.stream)
+        ? new MediaRecorder(stream, { mimeType: supportedMime })
+        : new MediaRecorder(stream)
       chunksRef.current = []
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) chunksRef.current.push(event.data)
@@ -166,12 +83,6 @@ export default function RecorderPanel({ songId, engine }: RecorderPanelProps) {
     setRecording(false)
   }
 
-  const updateMicVolume = (value: number) => {
-    setMicVolume(value)
-    const chain = micChainRef.current
-    if (chain && engine) chain.gain.gain.setTargetAtTime(value, engine.context.currentTime, 0.015)
-  }
-
   return (
     <section className="panel p-4 sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -187,7 +98,7 @@ export default function RecorderPanel({ songId, engine }: RecorderPanelProps) {
         {!micReady ? (
           <button
             type="button"
-            onClick={() => void enableMicrophone()}
+            onClick={() => void enable()}
             disabled={!engine || recording}
             className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-400/40 bg-indigo-500/12 px-3 py-2 text-xs font-semibold text-indigo-100 transition hover:bg-indigo-500/22 disabled:opacity-50"
           >
@@ -196,7 +107,7 @@ export default function RecorderPanel({ songId, engine }: RecorderPanelProps) {
         ) : (
           <button
             type="button"
-            onClick={releaseMicrophone}
+            onClick={release}
             disabled={recording}
             className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-slate-400 transition hover:bg-slate-800 hover:text-slate-200 disabled:opacity-50"
           >
@@ -224,7 +135,7 @@ export default function RecorderPanel({ songId, engine }: RecorderPanelProps) {
             max="2"
             step="0.01"
             value={micVolume}
-            onChange={(event) => updateMicVolume(Number(event.target.value))}
+            onChange={(event) => setMicVolume(Number(event.target.value))}
             className="h-1.5 min-w-0 flex-1 accent-indigo-400"
             aria-label="麥克風音量"
             disabled={!micReady}
@@ -238,7 +149,7 @@ export default function RecorderPanel({ songId, engine }: RecorderPanelProps) {
           <button
             type="button"
             onClick={() => void startRecording()}
-            disabled={!engine || exporting}
+            disabled={!engine || exporting || recordingLocked}
             className="inline-flex items-center gap-2 rounded-xl bg-rose-500 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-rose-950/35 transition hover:bg-rose-400 disabled:opacity-50"
           >
             <Circle className="fill-current" size={16} />開始錄音
@@ -252,6 +163,7 @@ export default function RecorderPanel({ songId, engine }: RecorderPanelProps) {
             <Square className="fill-current" size={15} />停止並匯出
           </button>
         )}
+        {recordingLocked && !recording && <span className="text-xs text-amber-200">錄影進行中，無法同時錄音</span>}
         {exporting && <span className="inline-flex items-center gap-2 text-sm text-indigo-200"><LoaderCircle className="animate-spin" size={17} />正在轉成 MP3…</span>}
         {exportUrl && !exporting && (
           <a
@@ -263,7 +175,7 @@ export default function RecorderPanel({ songId, engine }: RecorderPanelProps) {
           </a>
         )}
       </div>
-      {error && <p className="mt-4 rounded-lg border border-rose-400/20 bg-rose-500/10 px-3 py-2 text-sm leading-6 text-rose-200">{error}</p>}
+      {(error || microphoneIssue) && <p className="mt-4 rounded-lg border border-rose-400/20 bg-rose-500/10 px-3 py-2 text-sm leading-6 text-rose-200">{error || microphoneIssue}</p>}
     </section>
   )
 }

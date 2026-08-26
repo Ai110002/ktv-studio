@@ -276,3 +276,53 @@ python -m demucs --two-stems=vocals -o <outdir> [-d mps] input.wav
 - 升降 key（pitch shift）、人聲效果（reverb/compressor）
 - 匯出 LRC 檔、多格式匯出（WAV/FLAC）
 - 桌面 App 包裝（Tauri）
+
+## 10. 追加：人聲/伴奏音質優化（2026-08-27 確認）
+
+### 問題
+
+demucs 分離後，人聲軌在 segment 接縫處會有音量抖動（忽大忽小）；兩軌整體也偏小聲。
+
+### 對策（實測參數）
+
+1. **demucs 分離參數**：`--shifts 1 --overlap 0.5`（htdemucs 論文建議；減少接縫 artifacts，代價約 2 倍運算時間，M1 MPS 約 1~2 分鐘/首歌）
+2. **人聲軌後處理**（`stabilize_vocals`）：`ffmpeg -af dynaudnorm=f=100:g=20:p=0.7:m=15`
+   - 實測：逐秒 RMS 起伏 span 56dB → 39dB（std 11.2 → 6.9dB），保留歌聲動態
+3. **伴奏軌後處理**（`normalize_instrumental`）：`ffmpeg -af loudnorm=I=-16:TP=-1.5:LRA=11`（整體響度正規化，保留音樂起伏）
+
+處理順序：separate → 後處理兩軌 → whisper 對穩定化後的人聲軌辨識（音量一致對 VAD 也有幫助）。
+
+## 11. 追加：Cover 錄影功能（2026-08-27 確認）
+
+### 需求
+
+版面切兩塊：**右半邊 = 原有大字歌詞**；**左半邊 = 錄影畫面（webcam）+ 已上字幕**。字幕一句一句換（非跑馬燈），字型可選、位置可拖曳。產出 Cover 影片檔（含麥克風 + EQ 後伴奏的混音音訊）。
+
+### 技術方案（開源專案標準做法：canvas.captureStream + MediaRecorder，如 RecordRTC/Remotion）
+
+1. webcam（`getUserMedia`，1280x720）畫面逐幀畫到 `<canvas>`（cover-fit）
+2. 依 `audio.currentTime` 找當前字幕句（與 KTVLyrics 相同邏輯），畫在 canvas 上：
+   - 整句文字（白字 + 黑邊/陰影），日文句下方附小字羅馬拼音
+   - 字型：系統字型下拉（PingFang TC / Hiragino / Noto Sans CJK TC / Microsoft JhengHei / Arial / Georgia / Courier New…）+ 大小滑桿
+   - 位置：pointer 拖曳調整（正規化 0~1 座標），`localStorage` 依 songId 持久化
+3. 錄製：`canvas.captureStream(30)` video track + `engine.recordDestination.stream` audio track（= 麥克風 + EQ 後伴奏的混音）→ MediaRecorder（Safari 用 video/mp4，Chrome 用 webm）→ blob
+4. `POST /api/songs/{id}/export-video` → ffmpeg 轉 `cover.mp4`（H.264 + AAC 192k + faststart + yuv420p）→ 下載連結
+5. 音訊/錄影互斥：影片錄製中停用純音訊錄音按鈕，反之亦然
+
+### 版面（StudioPage）
+
+```
+播放控制列（原樣）
+┌─────────────┬──────────────┐
+│ VideoPanel  │  KTVLyrics   │ ← 左右兩欄
+│（鏡頭+字幕） │（原大字歌詞） │
+├─────────────┴──────────────┤
+│ EQ 調音台 │ RecorderPanel  │ ← 原樣
+└────────────────────────────┘
+```
+
+### API
+
+- `POST /api/songs/{id}/export-video`：multipart `recording`（webm/mp4）→ `cover.mp4`，更新 meta.files.cover_video → `{url, filename}`
+- `GET /api/songs/{id}/audio/{kind}`：kind 增加 `cover_video`
+- Song 回應增加 `has_cover_video`

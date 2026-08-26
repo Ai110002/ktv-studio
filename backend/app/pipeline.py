@@ -12,7 +12,7 @@ from typing import Any
 
 from app.config import SONGS_DIR, UPLOAD_DIR
 from app.jobs import JobManager
-from app.services.audio import convert_to_wav, get_duration
+from app.services.audio import convert_to_wav, get_duration, normalize_instrumental, stabilize_vocals
 from app.services.downloader import DownloadError, download_youtube
 from app.services.separator import SeparationError, separate_vocals
 from app.services.subtitles import build_subtitles_json, clean_subtitle_text, normalize_language
@@ -111,6 +111,16 @@ class Pipeline:
             )
             if input_wav.name == "input.wav":
                 input_wav.unlink(missing_ok=True)
+
+            # 音質後處理：人聲穩定化（解決忽大忽小）+ 伴奏響度正規化
+            await self.job_manager.set_step_progress(
+                job_id, 0.5, "正在穩定化人聲音量"
+            )
+            await asyncio.to_thread(stabilize_vocals, separated.vocals_path)
+            await asyncio.to_thread(normalize_instrumental, separated.instrumental_path)
+            await self.job_manager.set_step_progress(
+                job_id, 1.0, "音軌後處理完成"
+            )
 
             await self.job_manager.set_step(job_id, "transcribe", "正在辨識歌詞")
             subtitle_source: str

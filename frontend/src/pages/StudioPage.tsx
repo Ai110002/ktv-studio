@@ -14,6 +14,7 @@ import { useAudioEngine } from '../components/AudioEngine'
 import Equalizer from '../components/Equalizer'
 import KTVLyrics from '../components/KTVLyrics'
 import RecorderPanel from '../components/RecorderPanel'
+import VideoPanel from '../components/VideoPanel'
 
 function StudioWorkspace({ song, subtitles }: { song: Song; subtitles: Subtitles | null }) {
   const navigate = useNavigate()
@@ -24,6 +25,7 @@ function StudioWorkspace({ song, subtitles }: { song: Song; subtitles: Subtitles
   const [duration, setDuration] = useState(song.duration || 0)
   const [masterVolume, setMasterVolume] = useState(0.9)
   const [playError, setPlayError] = useState('')
+  const [videoRecording, setVideoRecording] = useState(false)
 
   useEffect(() => {
     const audio = audioRef.current
@@ -137,10 +139,13 @@ function StudioWorkspace({ song, subtitles }: { song: Song; subtitles: Subtitles
       </section>
 
       {engineError && <p className="rounded-xl border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{engineError}</p>}
-      <KTVLyrics subtitles={subtitles} audioRef={audioRef} />
+      <div className="grid gap-5 xl:grid-cols-2">
+        <VideoPanel songId={song.id} engine={engine} subtitles={subtitles} audioRef={audioRef} onRecordingChange={setVideoRecording} />
+        <KTVLyrics subtitles={subtitles} audioRef={audioRef} />
+      </div>
       <div className="grid gap-5 xl:grid-cols-2">
         <Equalizer engine={engine} masterVolume={masterVolume} onMasterVolumeChange={changeMasterVolume} />
-        <RecorderPanel songId={song.id} engine={engine} />
+        <RecorderPanel songId={song.id} engine={engine} recordingLocked={videoRecording} />
       </div>
     </div>
   )

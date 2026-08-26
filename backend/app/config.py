@@ -25,6 +25,9 @@ DEMUCS_MODEL = "htdemucs"
 DEMUCS_STEM = "vocals"
 DEMUCS_MPS_DEVICE = "mps"
 DEMUCS_CPU_DEVICE = "cpu"
+# 品質參數：shifts=1 平均多次偏移結果、overlap=0.5 減少接縫 artifacts（約 2 倍運算）。
+DEMUCS_SHIFTS = 1
+DEMUCS_OVERLAP = 0.5
 # htdemucs 是 Transformer 模型，分段不能超過訓練長度 7.8 秒；
 # 不傳 --segment，讓 demucs 自動使用模型預設值。
 DEMUCS_SEGMENT_SECONDS = None
