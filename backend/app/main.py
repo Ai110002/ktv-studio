@@ -85,7 +85,8 @@ def _song_response(meta: dict[str, Any], song_dir: Path) -> dict[str, Any]:
     result["files"] = files
     result["status"] = "ready" if (song_dir / files.get("instrumental", "")).is_file() else "incomplete"
     result["has_cover"] = (song_dir / files.get("cover", "cover.mp3")).is_file()
-    result["has_cover_video"] = (song_dir / files.get("cover_video", "cover.mp4")).is_file()
+    cover_video = str(files.get("cover_video") or "")
+    result["has_cover_video"] = bool(cover_video) and (song_dir / cover_video).is_file()
     return result
 
 
