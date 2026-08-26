@@ -139,7 +139,7 @@ function StudioWorkspace({ song, subtitles }: { song: Song; subtitles: Subtitles
       </section>
 
       {engineError && <p className="rounded-xl border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{engineError}</p>}
-      <div className="grid gap-5 xl:grid-cols-2">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
         <VideoPanel songId={song.id} engine={engine} subtitles={subtitles} audioRef={audioRef} onRecordingChange={setVideoRecording} />
         <KTVLyrics subtitles={subtitles} audioRef={audioRef} />
       </div>

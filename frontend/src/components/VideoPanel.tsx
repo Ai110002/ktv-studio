@@ -79,6 +79,7 @@ export default function VideoPanel({ songId, engine, subtitles, audioRef, onReco
   const [error, setError] = useState('')
   const [dragging, setDragging] = useState(false)
   const [settings, setSettings] = useState<VideoSettings>(defaultSettings)
+  const [aidState, setAidState] = useState({ time: 0, playing: false })
   const { enable: enableMicrophone, error: microphoneIssue } = useMicrophone(engine)
 
   useEffect(() => {
@@ -163,12 +164,17 @@ export default function VideoPanel({ songId, engine, subtitles, audioRef, onReco
     const render = () => {
       context.fillStyle = '#020617'
       context.fillRect(0, 0, canvasWidth, canvasHeight)
+      // 鏡像顯示（像照鏡子）：預覽與錄製共用同一 canvas，所見即所得；字幕不鏡像。
+      context.save()
+      context.translate(canvasWidth, 0)
+      context.scale(-1, 1)
       if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth && video.videoHeight) {
         const scale = Math.max(canvasWidth / video.videoWidth, canvasHeight / video.videoHeight)
         const width = video.videoWidth * scale
         const height = video.videoHeight * scale
         context.drawImage(video, (canvasWidth - width) / 2, (canvasHeight - height) / 2, width, height)
       }
+      context.restore()
 
       const audio = audioRef.current
       const line = audio && !audio.paused ? currentLine(subtitles, audio.currentTime) : undefined
@@ -215,6 +221,19 @@ export default function VideoPanel({ songId, engine, subtitles, audioRef, onReco
     frame = window.requestAnimationFrame(updateTime)
     return () => window.cancelAnimationFrame(frame)
   }, [recording])
+
+  // 流動字幕輔助層：鏡頭開啟時追蹤播放時間，唱歌時逐字推進（僅預覽，不會錄進影片）。
+  useEffect(() => {
+    if (!webcamOpen) return
+    let frame = 0
+    const tick = () => {
+      const audio = audioRef.current
+      setAidState({ time: audio?.currentTime || 0, playing: Boolean(audio && !audio.paused) })
+      frame = window.requestAnimationFrame(tick)
+    }
+    frame = window.requestAnimationFrame(tick)
+    return () => window.cancelAnimationFrame(frame)
+  }, [audioRef, webcamOpen])
 
   const openWebcam = async () => {
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -292,6 +311,8 @@ export default function VideoPanel({ songId, engine, subtitles, audioRef, onReco
     }))
   }
 
+  const aidLine = aidState.playing ? currentLine(subtitles, aidState.time) : undefined
+
   return (
     <section className="panel overflow-hidden p-4 sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -331,6 +352,36 @@ export default function VideoPanel({ songId, engine, subtitles, audioRef, onReco
           }}
           className={`block w-full bg-slate-950 ${recording || !subtitles?.lines.length ? 'cursor-default' : 'cursor-move'}`}
         />
+        {webcamOpen && aidLine && (
+          <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center px-3 py-2 opacity-50">
+            <div
+              className="flex max-w-full flex-wrap items-center justify-center gap-x-2 gap-y-2 text-center"
+              style={{ fontFamily: `"${settings.fontFamily}", sans-serif`, fontSize: Math.round(settings.fontSize * 0.85) }}
+            >
+              {aidLine.words?.length ? (
+                aidLine.words.map((word, index) => (
+                  <span key={`${word.start}-${index}`} className="inline-flex flex-col items-center leading-tight">
+                    <span
+                      className={aidState.time >= word.start ? 'text-white' : 'text-white/40'}
+                      style={{ textShadow: '0 0 10px rgba(0,0,0,0.95), 0 2px 6px rgba(0,0,0,0.9)' }}
+                    >
+                      {word.text}
+                    </span>
+                    {subtitles?.language === 'ja' && word.romaji && (
+                      <span className={`mt-0.5 text-[0.42em] ${aidState.time >= word.start ? 'text-white' : 'text-white/40'}`} style={{ textShadow: '0 0 8px rgba(0,0,0,0.95)' }}>
+                        {word.romaji}
+                      </span>
+                    )}
+                  </span>
+                ))
+              ) : (
+                <span className="text-white" style={{ textShadow: '0 0 10px rgba(0,0,0,0.95), 0 2px 6px rgba(0,0,0,0.9)' }}>
+                  {aidLine.text}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
         {webcamOpen && <span className="pointer-events-none absolute left-3 top-3 rounded-md bg-slate-950/75 px-2 py-1 text-[11px] text-slate-300">{recording ? '錄影中，字幕設定已鎖定' : '拖曳字幕可調整位置'}</span>}
         {!subtitles?.lines.length && webcamOpen && <span className="pointer-events-none absolute right-3 top-3 rounded-md bg-amber-500/15 px-2 py-1 text-[11px] text-amber-100">此歌無字幕</span>}
         {!webcamOpen && <div className="pointer-events-none absolute inset-0 grid place-items-center text-sm text-slate-500">開啟鏡頭後即可預覽字幕</div>}
