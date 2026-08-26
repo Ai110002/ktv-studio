@@ -222,8 +222,9 @@ export default function VideoPanel({ songId, engine, subtitles, audioRef, onReco
       return
     }
     setError('')
+    let stream: MediaStream | null = null
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: false })
+      stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: false })
       webcamStreamRef.current = stream
       const video = webcamVideoRef.current
       if (video) {
@@ -232,6 +233,9 @@ export default function VideoPanel({ songId, engine, subtitles, audioRef, onReco
       }
       setWebcamOpen(true)
     } catch (cameraError) {
+      stream?.getTracks().forEach((track) => track.stop())
+      if (webcamStreamRef.current === stream) webcamStreamRef.current = null
+      if (webcamVideoRef.current) webcamVideoRef.current.srcObject = null
       setError(webcamError(cameraError))
     }
   }
@@ -251,7 +255,8 @@ export default function VideoPanel({ songId, engine, subtitles, audioRef, onReco
       const videoStream = canvasRef.current.captureStream(30)
       const combined = new MediaStream([
         ...videoStream.getVideoTracks(),
-        ...engine.getRecordStream().getAudioTracks(),
+        // 複製音訊軌，停止匯出 stream 時不會讓 AudioEngine 的混音 destination ended。
+        ...engine.getRecordStream().getAudioTracks().map((track) => track.clone()),
       ])
       const mimeType = ['video/mp4', 'video/webm;codecs=vp8,opus'].find((type) => MediaRecorder.isTypeSupported(type))
       const recorder = mimeType ? new MediaRecorder(combined, { mimeType }) : new MediaRecorder(combined)
