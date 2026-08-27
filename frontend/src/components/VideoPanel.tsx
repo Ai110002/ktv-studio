@@ -269,7 +269,7 @@ export default function VideoPanel({ songId, engine, subtitles, audioRef, onReco
           context.strokeText(textLine, x, ty)
           context.fillText(textLine, x, ty)
         })
-        if (hasRomaji) {
+        if (hasRomaji && line.romaji) {
           context.font = `600 ${Math.max(20, drawSize * 0.48)}px "${settings.fontFamily}"`
           context.lineWidth = Math.max(2, drawSize * 0.055)
           const romajiY = top + textLines.length * lineHeight + romajiHeight / 2
