@@ -71,6 +71,42 @@ function currentLine(subtitles: Subtitles | null, time: number) {
   return index > 0 ? lines[index - 1] : lines[0]
 }
 
+/**
+ * 依畫布寬度自動折行：有空格的語言（英/日羅馬字）按單詞折，
+ * 無空格的語言（中日文）逐字元折。單一超長單詞也會強制折行。
+ */
+function wrapText(context: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  if (context.measureText(text).width <= maxWidth) return [text]
+  const words = text.split(/\s+/).filter(Boolean)
+  if (words.length <= 1) {
+    const lines: string[] = []
+    let current = ''
+    for (const char of text) {
+      if (!current || context.measureText(current + char).width <= maxWidth) {
+        current += char
+      } else {
+        lines.push(current)
+        current = char
+      }
+    }
+    if (current) lines.push(current)
+    return lines
+  }
+  const lines: string[] = []
+  let current = ''
+  for (const word of words) {
+    const test = current ? `${current} ${word}` : word
+    if (context.measureText(test).width <= maxWidth) {
+      current = test
+    } else {
+      if (current) lines.push(current)
+      current = word
+    }
+  }
+  if (current) lines.push(current)
+  return lines
+}
+
 function formatRecordingTime(seconds: number): string {
   const whole = Math.max(0, Math.floor(seconds))
   return `${String(Math.floor(whole / 60)).padStart(2, '0')}:${String(whole % 60).padStart(2, '0')}`
@@ -199,23 +235,44 @@ export default function VideoPanel({ songId, engine, subtitles, audioRef, onReco
       const line = audio && !audio.paused ? currentLine(subtitles, audio.currentTime) : undefined
       if (line) {
         const x = settings.x * canvasWidth
-        const y = settings.y * canvasHeight
+        const centerY = settings.y * canvasHeight
         context.save()
         context.textAlign = 'center'
         context.textBaseline = 'middle'
         context.lineJoin = 'round'
-        context.font = `800 ${settings.fontSize}px "${settings.fontFamily}"`
-        context.lineWidth = Math.max(3, settings.fontSize * 0.11)
         context.strokeStyle = 'rgba(0, 0, 0, 0.9)'
         context.fillStyle = '#ffffff'
         context.shadowColor = 'rgba(0, 0, 0, 0.86)'
         context.shadowBlur = 8
-        context.strokeText(line.text, x, y)
-        context.fillText(line.text, x, y)
-        if (subtitles?.language === 'ja' && line.romaji) {
-          context.font = `600 ${Math.max(20, settings.fontSize * 0.48)}px "${settings.fontFamily}"`
-          context.lineWidth = Math.max(2, settings.fontSize * 0.055)
-          const romajiY = y + settings.fontSize * 0.82
+
+        // 自動折行：超過兩行時縮小字體再試，避免歌詞超出畫面
+        const maxWidth = canvasWidth - 80
+        let drawSize = settings.fontSize
+        context.font = `800 ${drawSize}px "${settings.fontFamily}"`
+        let textLines = wrapText(context, line.text, maxWidth)
+        while (textLines.length > 2 && drawSize > settings.fontSize * 0.6) {
+          drawSize = Math.max(20, Math.round(drawSize * 0.85))
+          context.font = `800 ${drawSize}px "${settings.fontFamily}"`
+          textLines = wrapText(context, line.text, maxWidth)
+        }
+        const lineHeight = Math.round(drawSize * 1.25)
+        const hasRomaji = subtitles?.language === 'ja' && Boolean(line.romaji)
+        const romajiHeight = hasRomaji ? Math.max(18, Math.round(drawSize * 0.62)) : 0
+        const blockHeight = textLines.length * lineHeight + romajiHeight
+        // 垂直邊界保護：整塊字幕保持在畫布內
+        const minTop = lineHeight / 2
+        const maxTop = Math.max(minTop, canvasHeight - blockHeight - lineHeight / 2)
+        const top = Math.min(Math.max(centerY - blockHeight / 2, minTop), maxTop)
+        context.lineWidth = Math.max(3, drawSize * 0.11)
+        textLines.forEach((textLine, index) => {
+          const ty = top + index * lineHeight + lineHeight / 2
+          context.strokeText(textLine, x, ty)
+          context.fillText(textLine, x, ty)
+        })
+        if (hasRomaji) {
+          context.font = `600 ${Math.max(20, drawSize * 0.48)}px "${settings.fontFamily}"`
+          context.lineWidth = Math.max(2, drawSize * 0.055)
+          const romajiY = top + textLines.length * lineHeight + romajiHeight / 2
           context.strokeText(line.romaji, x, romajiY)
           context.fillText(line.romaji, x, romajiY)
         }
