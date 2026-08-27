@@ -52,6 +52,7 @@ def transcribe_vocals(
     vocals_path: Path,
     *,
     on_progress: ProgressCallback | None = None,
+    initial_prompt: str | None = None,
 ) -> TranscriptionResult:
     """辨識人聲軌並回傳行級 segments 與展開後的逐字資料。"""
 
@@ -72,6 +73,7 @@ def transcribe_vocals(
             language=None,
             word_timestamps=True,
             vad_filter=True,
+            initial_prompt=initial_prompt,
         )
         segments: list[dict[str, Any]] = []
         all_words: list[dict[str, Any]] = []

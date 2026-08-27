@@ -105,6 +105,10 @@ export default function ImportPage() {
 
   const retry = async () => {
     if (!job) return
+    if (job.source_type === 'retranscribe') {
+      setError('重新辨識工作請在錄唱室重新送出歌詞')
+      return
+    }
     setError('')
     setSubmitting(true)
     try {

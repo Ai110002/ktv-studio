@@ -14,6 +14,7 @@ from app.config import SONGS_DIR, UPLOAD_DIR
 from app.jobs import JobManager
 from app.services.audio import convert_to_wav, get_duration, normalize_instrumental, stabilize_vocals
 from app.services.downloader import DownloadError, download_youtube
+from app.services.lyrics import fetch_lrclib_lines
 from app.services.separator import SeparationError, separate_vocals
 from app.services.subtitles import build_subtitles_json, clean_subtitle_text, normalize_language
 from app.services.transcriber import TranscriptionError, transcribe_vocals
@@ -57,19 +58,111 @@ class Pipeline:
 
         return report
 
+    async def _run_retranscribe(
+        self,
+        job: dict[str, Any],
+        song_dir: Path,
+        loop: asyncio.AbstractEventLoop,
+    ) -> None:
+        """沿用既有純人聲軌，以使用者貼上的歌詞提示 Whisper。"""
+
+        job_id = str(job["job_id"])
+        missing_lyrics_error = "找不到貼上的歌詞，請重新送出"
+        meta_path = song_dir / "meta.json"
+        lyrics_path = song_dir / "lyrics_user.txt"
+        if not meta_path.is_file() or not lyrics_path.is_file():
+            raise PipelineError(missing_lyrics_error)
+
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            lyrics = lyrics_path.read_text(encoding="utf-8").strip()
+        except (OSError, json.JSONDecodeError) as exc:
+            raise PipelineError(missing_lyrics_error) from exc
+        if not isinstance(meta, dict) or not lyrics:
+            raise PipelineError(missing_lyrics_error)
+
+        files = meta.get("files")
+        title = meta.get("title")
+        artist = meta.get("artist")
+        language = meta.get("language")
+        vocals_name = files.get("vocals") if isinstance(files, dict) else None
+        if not all(isinstance(value, str) and value.strip() for value in (title, language, vocals_name)):
+            raise PipelineError(missing_lyrics_error)
+        if not isinstance(artist, str):
+            raise PipelineError(missing_lyrics_error)
+        if Path(vocals_name).name != vocals_name:
+            raise PipelineError(missing_lyrics_error)
+        vocals_path = song_dir / vocals_name
+        if not vocals_path.is_file():
+            raise PipelineError(missing_lyrics_error)
+
+        await self.job_manager.set_step(job_id, "fetch", "沿用已分離音軌")
+        await self.job_manager.set_step_progress(job_id, 1.0, "沿用已分離音軌")
+        await self.job_manager.set_step(job_id, "separate", "沿用已分離音軌")
+        await self.job_manager.set_step_progress(job_id, 1.0, "沿用已分離音軌")
+
+        await self.job_manager.set_step(job_id, "transcribe", "正在用正確歌詞重新辨識")
+        transcription = await asyncio.to_thread(
+            transcribe_vocals,
+            vocals_path,
+            on_progress=self._progress_callback(loop, job_id),
+            initial_prompt=lyrics[:1500],
+        )
+
+        await self.job_manager.set_step(job_id, "subtitles", "正在整理 KTV 字幕")
+        subtitles = build_subtitles_json(
+            language=language,
+            title=title,
+            source="whisper",
+            lines=transcription.segments,
+        )
+        try:
+            (song_dir / "subtitles.json").write_text(
+                json.dumps(subtitles, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+        except OSError as exc:
+            raise PipelineError("寫入重新辨識字幕失敗") from exc
+        await self.job_manager.set_step_progress(
+            job_id,
+            1.0,
+            "字幕整理完成" if subtitles["lines"] else "未偵測到可用字幕，仍可使用伴奏錄唱",
+        )
+
+        await self.job_manager.set_step(job_id, "finalize", "正在完成重新辨識")
+        try:
+            duration = await asyncio.to_thread(get_duration, vocals_path)
+        except Exception:
+            try:
+                duration = float(meta.get("duration") or 0)
+            except (TypeError, ValueError):
+                duration = 0.0
+        await self.job_manager.set_step_progress(job_id, 1.0, "字幕重新辨識完成")
+        duration_note = f"（音軌約 {round(duration)} 秒）" if duration > 0 else ""
+        await self.job_manager.complete(job_id, f"已依正確歌詞重新辨識完成{duration_note}")
+
     async def run(self, job_id: str) -> None:
         job = await self.job_manager.get(job_id)
         if job is None:
             raise PipelineError("找不到工作資料")
         song_id = str(job["song_id"])
         song_dir = SONGS_DIR / song_id
-        song_dir.mkdir(parents=True, exist_ok=True)
         loop = asyncio.get_running_loop()
+        source_type = str(job.get("source_type"))
+
+        if source_type == "retranscribe":
+            try:
+                await self._run_retranscribe(job, song_dir, loop)
+            except (TranscriptionError, PipelineError) as exc:
+                raise PipelineError(str(exc)) from exc
+            except Exception as exc:
+                raise PipelineError(f"重新辨識歌詞時發生錯誤：{exc}") from exc
+            return
+
+        song_dir.mkdir(parents=True, exist_ok=True)
 
         try:
             await self.job_manager.set_step(job_id, "fetch", "正在取得音訊")
             progress = self._progress_callback(loop, job_id)
-            source_type = str(job.get("source_type"))
             source_url: str | None = None
             artist = ""
             subtitle_lines: list[dict[str, Any]] | None = None
@@ -133,14 +226,25 @@ class Pipeline:
                     job_id, 1.0, "已取得 YouTube 字幕，略過語音辨識"
                 )
             else:
-                transcription = await asyncio.to_thread(
-                    transcribe_vocals,
-                    separated.vocals_path,
-                    on_progress=self._progress_callback(loop, job_id),
-                )
-                subtitle_source = "whisper"
-                transcript_lines = transcription.segments
-                language = _infer_language(transcript_lines, transcription.language)
+                await self.job_manager.set_step_progress(job_id, 0.15, "正在搜尋歌詞庫")
+                lrc_lines = await asyncio.to_thread(fetch_lrclib_lines, title, artist)
+                if lrc_lines:
+                    subtitle_source = "lrclib"
+                    transcript_lines = lrc_lines
+                    language = _infer_language(lrc_lines, language_hint)
+                    await self.job_manager.set_step_progress(
+                        job_id, 1.0, "已取得歌詞庫字幕（正確歌詞 + 時間軸）"
+                    )
+                else:
+                    await self.job_manager.set_step_progress(job_id, 0.15, "歌詞庫找不到，改用語音辨識")
+                    transcription = await asyncio.to_thread(
+                        transcribe_vocals,
+                        separated.vocals_path,
+                        on_progress=self._progress_callback(loop, job_id),
+                    )
+                    subtitle_source = "whisper"
+                    transcript_lines = transcription.segments
+                    language = _infer_language(transcript_lines, transcription.language)
 
             await self.job_manager.set_step(job_id, "subtitles", "正在整理 KTV 字幕")
             subtitles = build_subtitles_json(

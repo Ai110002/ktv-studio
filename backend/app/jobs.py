@@ -99,6 +99,7 @@ class JobManager:
         url: str | None = None,
         upload_id: str | None = None,
         title: str | None = None,
+        song_id: str | None = None,
     ) -> dict[str, Any]:
         await self.load()
         job_id = uuid.uuid4().hex
@@ -111,7 +112,7 @@ class JobManager:
             "progress": 0.0,
             "message": "等待處理",
             "error": None,
-            "song_id": uuid.uuid4().hex[:12],
+            "song_id": song_id or uuid.uuid4().hex[:12],
             "title": title or "",
             "source_type": source_type,
             "url": url,

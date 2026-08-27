@@ -12,7 +12,7 @@ export interface Job {
   error: string | null
   song_id: string | null
   title: string
-  source_type: 'youtube' | 'upload'
+  source_type: 'youtube' | 'upload' | 'retranscribe'
   url: string | null
   upload_id: string | null
   created_at: string
@@ -59,7 +59,7 @@ export interface SubtitleLine {
 
 export interface Subtitles {
   language: string
-  source: 'whisper' | 'youtube'
+  source: 'whisper' | 'youtube' | 'lrclib'
   title: string
   lines: SubtitleLine[]
 }
@@ -125,6 +125,14 @@ export function getSong(songId: string) {
 
 export function getSubtitles(songId: string) {
   return request<Subtitles>(`/api/songs/${encodeURIComponent(songId)}/subtitles`)
+}
+
+export function submitLyrics(songId: string, text: string) {
+  return request<{ job_id: string }>(`/api/songs/${encodeURIComponent(songId)}/lyrics`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  })
 }
 
 export function deleteSong(songId: string) {

@@ -18,7 +18,7 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.config import SONGS_DIR, STATIC_DIR, UPLOAD_DIR, ensure_data_directories
 from app.jobs import JobManager
@@ -31,6 +31,18 @@ class CreateJobRequest(BaseModel):
     url: str | None = None
     upload_id: str | None = None
     title: str | None = Field(default=None, max_length=300)
+
+
+class SubmitLyricsRequest(BaseModel):
+    text: str
+
+    @field_validator("text")
+    @classmethod
+    def validate_text(cls, value: str) -> str:
+        text = value.strip()
+        if not 1 <= len(text) <= 5000:
+            raise ValueError("請貼上 1 到 5000 字元的歌詞")
+        return text
 
 
 job_manager = JobManager()
@@ -199,6 +211,35 @@ async def get_subtitles(song_id: str) -> FileResponse:
     if not subtitle_path.is_file():
         raise HTTPException(status_code=404, detail="字幕檔尚未產生")
     return FileResponse(subtitle_path, media_type="application/json; charset=utf-8")
+
+
+@app.post("/api/songs/{song_id}/lyrics")
+async def submit_lyrics(song_id: str, request: SubmitLyricsRequest) -> dict[str, str]:
+    """儲存使用者修正歌詞，並建立沿用既有人聲軌的重新辨識工作。"""
+
+    try:
+        song_dir, meta = _song_meta(song_id)
+    except HTTPException as exc:
+        if exc.status_code in {404, 500}:
+            raise HTTPException(status_code=404, detail="找不到歌曲") from exc
+        raise
+
+    title = meta.get("title")
+    files = meta.get("files")
+    if not isinstance(title, str) or not title.strip() or not isinstance(files, dict):
+        raise HTTPException(status_code=404, detail="找不到歌曲")
+    try:
+        (song_dir / "lyrics_user.txt").write_text(request.text, encoding="utf-8")
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail="儲存貼上的歌詞失敗") from exc
+
+    job = await job_manager.create(
+        source_type="retranscribe",
+        url=None,
+        title=title.strip(),
+        song_id=song_id,
+    )
+    return {"job_id": str(job["job_id"])}
 
 
 @app.post("/api/songs/{song_id}/export")
