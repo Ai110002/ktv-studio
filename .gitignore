@@ -6,10 +6,6 @@ backend/data/
 
 # Node
 node_modules/
-frontend/dist/
-
-# Backend static (frontend build output)
-backend/app/static/
 
 # OS
 .DS_Store
