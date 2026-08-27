@@ -7,6 +7,8 @@ import json
 import mimetypes
 import re
 import shutil
+import subprocess
+import sys
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -254,6 +256,48 @@ async def export_cover_video(
         temporary.unlink(missing_ok=True)
         await recording.close()
     return {"url": f"/api/songs/{song_id}/audio/cover_video", "filename": "cover.mp4"}
+
+
+# 剪映 App 的常見名稱（macOS）；只接受固定清單，避免任意路徑執行。
+_JIANYING_APP_NAMES = ("剪映.app", "剪映专业版.app", "CapCut.app", "JianYing.app", "CapCut 剪映.app")
+
+
+@app.post("/api/songs/{song_id}/open-in-jiaying")
+async def open_in_jiaying(song_id: str) -> dict[str, str]:
+    """用剪映開啟 cover.mp4，方便接著剪輯（目前支援 macOS）。"""
+
+    song_dir, meta = _song_meta(song_id)
+    video = song_dir / str((meta.get("files") or {}).get("cover_video") or "")
+    if not video.is_file():
+        raise HTTPException(status_code=404, detail="還沒有 Cover 影片，請先錄製並匯出")
+
+    if sys.platform != "darwin":
+        raise HTTPException(
+            status_code=400,
+            detail="目前僅 macOS 支援一鍵開啟；Windows 請直接將 cover.mp4 拖入剪映",
+        )
+
+    search_bases = [Path("/Applications"), Path.home() / "Applications"]
+    app_path = next(
+        (base / name for base in search_bases for name in _JIANYING_APP_NAMES if (base / name).is_dir()),
+        None,
+    )
+    if app_path is None:
+        raise HTTPException(
+            status_code=404,
+            detail="未偵測到剪映。請先安裝剪映（https://www.capcut.com/），或直接將 cover.mp4 拖入剪映",
+        )
+
+    try:
+        await asyncio.to_thread(
+            subprocess.run,
+            ["open", "-a", str(app_path), str(video)],
+            check=True,
+            timeout=30,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"開啟剪映失敗：{exc}") from exc
+    return {"ok": "true", "message": "已在剪映中開啟 cover.mp4"}
 
 
 @app.delete("/api/songs/{song_id}")

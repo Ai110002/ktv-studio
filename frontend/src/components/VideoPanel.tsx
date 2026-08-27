@@ -1,6 +1,6 @@
-import { Camera, CameraOff, Circle, Download, LoaderCircle, Square } from 'lucide-react'
+import { Camera, CameraOff, Circle, Download, LoaderCircle, Scissors, Square } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
-import { exportVideo, type Subtitles } from '../api'
+import { exportVideo, openInJiaying, type Subtitles } from '../api'
 import { useMicrophone, type AudioEngine } from './AudioEngine'
 
 interface VideoPanelProps {
@@ -16,11 +16,13 @@ interface VideoSettings {
   fontSize: number
   x: number
   y: number
+  filter: string
+  filterStrength: number
 }
 
 const canvasWidth = 1280
 const canvasHeight = 720
-const defaultSettings: VideoSettings = { fontFamily: 'PingFang TC', fontSize: 48, x: 0.5, y: 0.85 }
+const defaultSettings: VideoSettings = { fontFamily: 'PingFang TC', fontSize: 48, x: 0.5, y: 0.85, filter: 'none', filterStrength: 0.8 }
 const fontOptions = [
   'PingFang TC',
   'Hiragino Maru Gothic ProN',
@@ -32,6 +34,17 @@ const fontOptions = [
   'Georgia',
   'Courier New',
 ]
+
+// 錄影濾鏡（參考剪映的濾鏡分類）：s 為強度 0~1，套用在鏡頭畫面上（字幕不套用）。
+const filters: Record<string, { label: string; css: (s: number) => string }> = {
+  none: { label: '原圖', css: () => 'none' },
+  bright: { label: '美白', css: (s) => `brightness(${1 + 0.12 * s}) contrast(${1 - 0.05 * s}) saturate(${1 - 0.12 * s})` },
+  vivid: { label: '鮮豔', css: (s) => `saturate(${1 + 0.5 * s}) contrast(${1 + 0.06 * s})` },
+  warm: { label: '暖陽', css: (s) => `sepia(${0.28 * s}) saturate(${1 + 0.2 * s}) brightness(${1 + 0.04 * s})` },
+  cool: { label: '冷冽', css: (s) => `saturate(${1 + 0.15 * s}) brightness(${1 + 0.04 * s}) hue-rotate(${-8 * s}deg)` },
+  vintage: { label: '復古', css: (s) => `sepia(${0.45 * s}) contrast(${1 - 0.05 * s}) brightness(${1 - 0.03 * s}) saturate(${1 - 0.1 * s})` },
+  mono: { label: '黑白', css: (s) => `grayscale(${s}) contrast(${1 + 0.06 * s})` },
+}
 
 function webcamError(error: unknown): string {
   if (error instanceof DOMException && ['NotAllowedError', 'SecurityError'].includes(error.name)) {
@@ -76,6 +89,7 @@ export default function VideoPanel({ songId, engine, subtitles, audioRef, onReco
   const [recordingTime, setRecordingTime] = useState(0)
   const [exporting, setExporting] = useState(false)
   const [exportUrl, setExportUrl] = useState<string | null>(null)
+  const [jiayingBusy, setJiayingBusy] = useState(false)
   const [error, setError] = useState('')
   const [dragging, setDragging] = useState(false)
   const [settings, setSettings] = useState<VideoSettings>(defaultSettings)
@@ -94,6 +108,8 @@ export default function VideoPanel({ songId, engine, subtitles, audioRef, onReco
         fontSize: typeof parsed.fontSize === 'number' ? Math.min(80, Math.max(28, parsed.fontSize)) : defaultSettings.fontSize,
         x: typeof parsed.x === 'number' ? Math.min(0.95, Math.max(0.05, parsed.x)) : defaultSettings.x,
         y: typeof parsed.y === 'number' ? Math.min(0.95, Math.max(0.05, parsed.y)) : defaultSettings.y,
+        filter: parsed.filter && filters[parsed.filter] ? parsed.filter : defaultSettings.filter,
+        filterStrength: typeof parsed.filterStrength === 'number' ? Math.min(1, Math.max(0, parsed.filterStrength)) : defaultSettings.filterStrength,
       })
     } catch {
       setSettings(defaultSettings)
@@ -171,7 +187,11 @@ export default function VideoPanel({ songId, engine, subtitles, audioRef, onReco
         const scale = Math.max(canvasWidth / video.videoWidth, canvasHeight / video.videoHeight)
         const width = video.videoWidth * scale
         const height = video.videoHeight * scale
+        const filter = filters[settings.filter] || filters.none
+        const filterCss = filter.css(settings.filterStrength)
+        if (filterCss !== 'none') context.filter = filterCss
         context.drawImage(video, (canvasWidth - width) / 2, (canvasHeight - height) / 2, width, height)
+        context.filter = 'none'
       }
       context.restore()
 
@@ -354,6 +374,46 @@ export default function VideoPanel({ songId, engine, subtitles, audioRef, onReco
         </label>
       </div>
 
+      <div className="mt-4 rounded-xl border border-white/6 bg-slate-950/45 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-xs text-slate-400">錄影濾鏡（會錄進影片）</span>
+          {settings.filter !== 'none' && (
+            <label className="flex items-center gap-2 text-xs text-slate-400">
+              強度
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value={settings.filterStrength}
+                disabled={recording}
+                onChange={(event) => setSettings((current) => ({ ...current, filterStrength: Number(event.target.value) }))}
+                className="h-1.5 w-28 accent-indigo-400 disabled:opacity-50"
+                aria-label="濾鏡強度"
+              />
+              <span className="w-9 text-right tabular-nums">{Math.round(settings.filterStrength * 100)}%</span>
+            </label>
+          )}
+        </div>
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
+          {Object.entries(filters).map(([key, filter]) => (
+            <button
+              key={key}
+              type="button"
+              disabled={recording}
+              onClick={() => setSettings((current) => ({ ...current, filter: key }))}
+              className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition disabled:opacity-50 ${
+                settings.filter === key
+                  ? 'border border-indigo-400/60 bg-indigo-500/20 text-indigo-100'
+                  : 'border border-slate-700 bg-slate-900 text-slate-300 hover:border-indigo-400/50 hover:text-indigo-100'
+              }`}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="mt-4 flex flex-wrap items-center gap-3">
         {!recording ? (
           <button type="button" onClick={() => void startRecording()} disabled={!engine || !webcamOpen || exporting} className="inline-flex items-center gap-2 rounded-xl bg-rose-500 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-rose-950/35 transition hover:bg-rose-400 disabled:opacity-50">
@@ -366,7 +426,28 @@ export default function VideoPanel({ songId, engine, subtitles, audioRef, onReco
         )}
         {recording && <span className="inline-flex items-center gap-2 text-sm font-semibold tabular-nums text-rose-200"><Circle className="recording-pulse fill-current" size={13} />{formatRecordingTime(recordingTime)}</span>}
         {exporting && <span className="inline-flex items-center gap-2 text-sm text-indigo-200"><LoaderCircle className="animate-spin" size={17} />正在轉成 MP4…</span>}
-        {exportUrl && !exporting && <a href={exportUrl} download="cover.mp4" className="inline-flex items-center gap-2 rounded-lg border border-emerald-400/35 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/18"><Download size={16} />下載 Cover 影片</a>}
+        {exportUrl && !exporting && (
+          <>
+            <a href={exportUrl} download="cover.mp4" className="inline-flex items-center gap-2 rounded-lg border border-emerald-400/35 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/18">
+              <Download size={16} />下載 Cover 影片
+            </a>
+            <button
+              type="button"
+              onClick={() => {
+                setJiayingBusy(true)
+                setError('')
+                void openInJiaying(songId)
+                  .catch((openError) => setError(openError instanceof Error ? openError.message : '開啟剪映失敗'))
+                  .finally(() => setJiayingBusy(false))
+              }}
+              disabled={jiayingBusy}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-800/60 px-3 py-2 text-sm font-semibold text-slate-200 transition hover:border-indigo-400/50 hover:text-indigo-100 disabled:opacity-50"
+            >
+              {jiayingBusy ? <LoaderCircle className="animate-spin" size={16} /> : <Scissors size={16} />}
+              在剪映中開啟
+            </button>
+          </>
+        )}
       </div>
       {(error || microphoneIssue) && <p className="mt-4 rounded-lg border border-rose-400/20 bg-rose-500/10 px-3 py-2 text-sm leading-6 text-rose-200">{error || microphoneIssue}</p>}
     </section>

@@ -149,6 +149,13 @@ export async function exportVideo(songId: string, blob: Blob) {
   )
 }
 
+export function openInJiaying(songId: string) {
+  return request<{ ok: string; message: string }>(
+    `/api/songs/${encodeURIComponent(songId)}/open-in-jiaying`,
+    { method: 'POST' },
+  )
+}
+
 export function audioUrl(songId: string, kind: keyof SongFiles): string {
   return `/api/songs/${encodeURIComponent(songId)}/audio/${kind}`
 }

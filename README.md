@@ -22,6 +22,8 @@ simple 7-band EQ, and lets you **record audio or video covers** — all processe
   - **Audio**: mic + EQ'd instrumental → `cover.mp3`
   - **Video**: webcam + burned-in subtitle → `cover.mp4` (H.264 + AAC)
     - mirrored preview (like a mirror), subtitle font & size selectable, **drag subtitle position** (remembered per song)
+    - **recording filters** (Bright / Vivid / Warm / Cool / Vintage / B&W with adjustable strength, burned into the video)
+    - **one-click "Open in CapCut/JianYing"** (macOS) — send `cover.mp4` straight to the free editor to continue cutting
     - sing along with the big word-by-word lyrics on the right side
 - Single-job queue tuned for 8 GB RAM machines
 
