@@ -37,15 +37,48 @@
 
 ## 🚀 快速開始
 
-**需求：** macOS（Homebrew）· 約 6GB 可用磁碟
+**需求：** macOS（Homebrew）或 Windows 10/11 · 約 6GB 可用磁碟
 
 ```bash
-./scripts/setup.sh    # 自動安裝 uv + ffmpeg，接著安裝後端相依
+./scripts/setup.sh    # macOS：自動安裝 uv + ffmpeg，接著安裝後端相依
 ./scripts/start.sh    # 啟動伺服器並自動開啟 http://localhost:8000
+```
+
+Windows：
+
+```bat
+scripts\setup.bat     :: 用 winget 自動安裝 uv + ffmpeg，接著安裝後端相依
+scripts\start.bat     :: 啟動伺服器並開啟 http://localhost:8000
 ```
 
 第一次處理歌曲會自動下載 AI 模型（Demucs 約 330MB、Whisper medium 約 1.5GB）。
 前端已預建置並提交在 repo 內，**一般使用不需要安裝 Node.js**。
+
+> ⚠️ Windows 腳本是照 winget 標準流程撰寫，尚未在實機驗證過。
+
+## 🐣 給完全不會的人：一步步安裝
+
+如果你從來沒用過終端機，照下面做就好：
+
+**macOS**
+
+1. 打開 <https://github.com/Ai110002/ktv-studio> → 點綠色 **Code** → **Download ZIP** → 雙擊解壓縮。
+2. 按 `Cmd + 空白鍵`，輸入「終端機」並開啟。
+3. 輸入 `cd Downloads/ktv-studio-main` 按 Enter（如果解壓到別的地方，改用那個資料夾路徑）。
+4. 輸入 `./scripts/setup.sh` 按 Enter，等它跑完（5~10 分鐘，自動安裝一切）。
+5. 輸入 `./scripts/start.sh` 按 Enter，瀏覽器自動打開 App。完成！🎉
+
+**Windows**
+
+1. 打開 <https://github.com/Ai110002/ktv-studio> → 點綠色 **Code** → **Download ZIP** → 解壓縮。
+2. 按 Windows 鍵，輸入「PowerShell」並開啟。
+3. 輸入 `cd Downloads\ktv-studio-main` 按 Enter（解壓到別處就改路徑）。
+4. 輸入 `.\scripts\setup.bat` 按 Enter，等它跑完（5~10 分鐘）。
+5. 輸入 `.\scripts\start.bat` 按 Enter，瀏覽器自動打開 App。完成！🎉
+
+**第一次使用會發生什麼：** 第一首處理的歌會下載 AI 模型
+（Demucs 約 330MB 去人聲、Whisper 約 1.5GB 歌詞辨識）。只有一次，
+之後除了從 YouTube 下載音訊外，都可以離線運作。
 
 ### 使用方式
 
