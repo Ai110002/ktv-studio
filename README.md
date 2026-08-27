@@ -12,9 +12,11 @@ simple 7-band EQ, and lets you **record audio or video covers** — all processe
 - **AI vocal separation** (Demucs) — produces clean instrumental + vocals tracks with quality settings (`--shifts 1 --overlap 0.5`)
 - **Vocal stabilization** — fixes the uneven loudness ("忽大忽小") common after separation (dynaudnorm)
 - **Instrumental loudness normalization** (EBU R128, −16 LUFS)
-- **KTV subtitles, two sources:**
+- **KTV subtitles, three sources (best first):**
   - YouTube subtitles when available (with rolling-caption cleanup)
-  - Otherwise automatic speech recognition (faster-whisper) with **word-level timestamps**
+  - **Lyrics library (LRCLIB)** — correct lyrics + timestamps for most popular songs (JP/CN/EN), no AI listening needed
+  - Speech recognition (faster-whisper) as last resort, with **word-level timestamps**
+- **Paste the correct lyrics** in the studio to re-align subtitles when recognition is wrong (Whisper `initial_prompt`)
 - **Japanese lyrics come with romaji** (per-word + per-line); Chinese is converted to Traditional (Taiwan)
 - **KTV word-by-word highlight**, click a line to seek
 - **7-band EQ** with presets (Flat / Soft / De-harsh / Bright / Bass boost) — real-time in the browser

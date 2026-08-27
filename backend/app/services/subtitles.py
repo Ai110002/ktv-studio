@@ -15,7 +15,8 @@ _KAKASI = kakasi()
 _OPENCC = OpenCC("s2tw")
 _SPACE_RE = re.compile(r"\s+")
 _REPEATED_CHAR_RE = re.compile(r"([^\W\d_])\1{3,}", re.UNICODE)
-_JA_PUNCTUATION_RE = re.compile(r"[\s、。！？!?,，．…「」『』（）()\[\]【】〈〉《》・—ー〜～\-]+")
+# 注意：不刪除空白，讓 pykakasi 保留英文歌詞內的空格（日文歌常混英文）。
+_JA_PUNCTUATION_RE = re.compile(r"[、。！？!?,，．…「」『』（）()\[\]【】〈〉《》・—ー〜～\-]+")
 
 
 def normalize_language(language: str | None) -> str:
@@ -49,7 +50,8 @@ def ja_to_romaji(text: str | None) -> str:
         return ""
 
     converted = _KAKASI.convert(source)
-    return " ".join(piece["hepburn"] for piece in converted if piece.get("hepburn")).strip()
+    # 段落內可能已含英文空格（pykakasi 原樣保留拉丁文字），合併後壓縮多餘空白。
+    return _SPACE_RE.sub(" ", " ".join(piece["hepburn"] for piece in converted if piece.get("hepburn"))).strip()
 
 
 def zh_to_traditional(text: str | None) -> str:
