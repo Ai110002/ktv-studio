@@ -22,7 +22,7 @@ simple 7-band EQ, and lets you **record audio or video covers** — all processe
   - **Audio**: mic + EQ'd instrumental → `cover.mp3`
   - **Video**: webcam + burned-in subtitle → `cover.mp4` (H.264 + AAC)
     - mirrored preview (like a mirror), subtitle font & size selectable, **drag subtitle position** (remembered per song)
-    - a ~50% transparent word-flowing karaoke aid overlay while singing (not burned into the video)
+    - sing along with the big word-by-word lyrics on the right side
 - Single-job queue tuned for 8 GB RAM machines
 
 ## 🖥️ Hardware Requirements
