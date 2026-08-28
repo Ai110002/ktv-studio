@@ -138,3 +138,126 @@ def build_subtitles_json(
         "title": clean_subtitle_text(title),
         "lines": output_lines,
     }
+
+
+def build_manual_subtitles_json(
+    *,
+    language: str | None,
+    title: str,
+    lines: Iterable[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """組裝使用者自行提供的字幕，不改寫歌詞文字。
+
+    手動輸入的歌詞是權威來源；只允許整理時間欄位與日文的額外羅馬拼音，
+    絕不以辨識結果、空白合併或簡繁轉換取代使用者文字。
+    """
+
+    resolved_language = normalize_language(language)
+    output_lines: list[dict[str, Any]] = []
+    for raw_line in lines:
+        text = str(raw_line.get("text", "")).strip()
+        if not text:
+            continue
+        start = round(float(raw_line.get("start", 0)), 3)
+        end = round(float(raw_line.get("end", start)), 3)
+        if end < start:
+            end = start
+        line: dict[str, Any] = {"start": start, "end": end, "text": text, "words": None}
+        if resolved_language == "ja":
+            line["romaji"] = ja_to_romaji(text)
+        output_lines.append(line)
+
+    return {
+        "language": resolved_language,
+        "source": "manual",
+        "title": clean_subtitle_text(title),
+        "lines": output_lines,
+    }
+
+
+def align_user_lyrics_to_timeline(
+    lyrics: str,
+    reference_lines: Iterable[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """以既有字幕的時間範圍對齊使用者歌詞，完全不進行語音辨識。
+
+    使用者以換行提供的句子會原樣保留，並分配到最接近的既有 cue 範圍。
+    若貼上單行歌詞，則依既有 cue 的文字長度切成相同數量的片段，所有原始
+    字元都會依序保留。這提供粗略的自動對齊；需要更細緻時間時可用字幕工作台
+    逐句打點。
+    """
+
+    references: list[dict[str, Any]] = []
+    for raw_line in reference_lines:
+        try:
+            start = max(0.0, float(raw_line.get("start", 0)))
+            end = max(start, float(raw_line.get("end", start)))
+        except (TypeError, ValueError):
+            continue
+        references.append({"start": start, "end": end, "text": str(raw_line.get("text", ""))})
+    if not references:
+        return []
+
+    user_lines = [line.strip() for line in lyrics.splitlines() if line.strip()]
+    if not user_lines:
+        return []
+
+    def weight(text: str) -> int:
+        return max(1, len(re.sub(r"\s+", "", text)))
+
+    # 單行貼上常見於從網站複製歌詞；依原有 cue 的比例切段，文字不被修改。
+    if len(user_lines) == 1 and len(references) > 1 and len(user_lines[0]) >= len(references):
+        text = user_lines[0]
+        weights = [weight(str(line["text"])) for line in references]
+        total = sum(weights)
+        pieces: list[str] = []
+        offset = 0
+        accumulated = 0
+        for index, cue_weight in enumerate(weights):
+            accumulated += cue_weight
+            remaining = len(references) - index - 1
+            target = len(text) if index == len(references) - 1 else round(len(text) * accumulated / total)
+            target = max(offset + 1, min(target, len(text) - remaining))
+            pieces.append(text[offset:target])
+            offset = target
+        user_lines = pieces
+
+    if len(user_lines) == len(references):
+        return [
+            {"start": reference["start"], "end": reference["end"], "text": text}
+            for text, reference in zip(user_lines, references, strict=True)
+        ]
+
+    # 依輸入句子的長度，把連續的既有 cue 分配給每一句，保留原本的唱歌時間區間。
+    if len(user_lines) < len(references):
+        user_weights = [weight(text) for text in user_lines]
+        total_weight = sum(user_weights)
+        output: list[dict[str, Any]] = []
+        reference_start = 0
+        accumulated = 0
+        for index, (text, user_weight) in enumerate(zip(user_lines, user_weights, strict=True)):
+            accumulated += user_weight
+            remaining_users = len(user_lines) - index - 1
+            reference_end = len(references) - 1 if not remaining_users else round(len(references) * accumulated / total_weight) - 1
+            reference_end = max(reference_start, min(reference_end, len(references) - remaining_users - 1))
+            output.append({
+                "start": references[reference_start]["start"],
+                "end": references[reference_end]["end"],
+                "text": text,
+            })
+            reference_start = reference_end + 1
+        return output
+
+    # 使用者提供的句子多於舊 cue 時，按文字比例分配整段已知的唱歌範圍。
+    first_start = float(references[0]["start"])
+    last_end = float(references[-1]["end"])
+    weights = [weight(text) for text in user_lines]
+    total_weight = sum(weights)
+    output = []
+    elapsed_weight = 0
+    for index, (text, line_weight) in enumerate(zip(user_lines, weights, strict=True)):
+        start = first_start + (last_end - first_start) * elapsed_weight / total_weight
+        elapsed_weight += line_weight
+        end = last_end if index == len(user_lines) - 1 else first_start + (last_end - first_start) * elapsed_weight / total_weight
+        output.append({"start": start, "end": end, "text": text})
+    return output

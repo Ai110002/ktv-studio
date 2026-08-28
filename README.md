@@ -16,7 +16,7 @@ simple 7-band EQ, and lets you **record audio or video covers** — all processe
   - YouTube subtitles when available (with rolling-caption cleanup)
   - **Lyrics library (LRCLIB)** — correct lyrics + timestamps for most popular songs (JP/CN/EN), no AI listening needed
   - Speech recognition (faster-whisper) as last resort, with **word-level timestamps**
-- **Paste the correct lyrics** in the studio to re-align subtitles when recognition is wrong (Whisper `initial_prompt`)
+- **Paste correct lyrics to align timing only** — your text is kept as supplied and mapped to the existing subtitle cues; it **never calls Whisper or rewrites your lyrics**. Use the subtitle workbench for per-line timing refinements.
 - **Subtitle workbench** — edit lyric text immediately, import TXT/LRC/SRT/VTT files, and mark each line against playback time manually; edits are saved locally without running AI again
 - **Japanese lyrics come with romaji** (per-word + per-line); Chinese is converted to Traditional (Taiwan)
 - **KTV word-by-word highlight**, click a line to seek
@@ -24,7 +24,7 @@ simple 7-band EQ, and lets you **record audio or video covers** — all processe
 - **Record covers two ways:**
   - **Audio**: mic + EQ'd instrumental → `cover.mp3`
   - **Video**: webcam + burned-in subtitle → `cover.mp4` (H.264 + AAC)
-    - mirrored preview (like a mirror), subtitle font & size selectable, **drag subtitle position** (remembered per song)
+    - mirrored preview (like a mirror), subtitle font & size selectable, **drag subtitle position** (remembered per song), and choose whether subtitles are burned into the exported video
     - **recording filters** (Bright / Vivid / Warm / Cool / Vintage / B&W with adjustable strength, burned into the video)
     - **one-click "Open in CapCut/JianYing"** (macOS) — send `cover.mp4` straight to the free editor to continue cutting
     - sing along with the big word-by-word lyrics on the right side

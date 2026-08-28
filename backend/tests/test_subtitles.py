@@ -12,7 +12,7 @@ from unittest.mock import patch
 from pydantic import ValidationError
 
 from app.main import SubtitleLineUpdate, UpdateSubtitlesRequest, update_subtitles
-from app.services.subtitles import build_subtitles_json
+from app.services.subtitles import align_user_lyrics_to_timeline, build_manual_subtitles_json, build_subtitles_json
 
 
 class SubtitleRequestValidationTests(unittest.TestCase):
@@ -67,6 +67,44 @@ class SubtitleNormalizationTests(unittest.TestCase):
         self.assertEqual(subtitles["source"], "manual")
         self.assertIsNone(subtitles["lines"][0]["words"])
         self.assertIn("konnichi", subtitles["lines"][0]["romaji"])
+
+    def test_manual_lyrics_keep_user_text_without_conversion(self) -> None:
+        subtitles = build_manual_subtitles_json(
+            language="zh-TW",
+            title="測試歌曲",
+            lines=[{"start": 0, "end": 2, "text": "测试歌词（使用者原文）"}],
+        )
+
+        self.assertEqual(subtitles["source"], "manual")
+        self.assertEqual(subtitles["lines"][0]["text"], "测试歌词（使用者原文）")
+        self.assertIsNone(subtitles["lines"][0]["words"])
+
+    def test_align_user_lyrics_reuses_timestamps_without_recognition(self) -> None:
+        reference = [
+            {"start": 1.0, "end": 2.5, "text": "辨識到的第一句"},
+            {"start": 3.0, "end": 5.0, "text": "辨識到的第二句"},
+        ]
+
+        aligned = align_user_lyrics_to_timeline("使用者正確第一句\n使用者正確第二句", reference)
+
+        self.assertEqual(
+            aligned,
+            [
+                {"start": 1.0, "end": 2.5, "text": "使用者正確第一句"},
+                {"start": 3.0, "end": 5.0, "text": "使用者正確第二句"},
+            ],
+        )
+
+    def test_align_single_line_preserves_every_character(self) -> None:
+        reference = [
+            {"start": 0.0, "end": 2.0, "text": "短句"},
+            {"start": 2.0, "end": 5.0, "text": "比較長的句子"},
+        ]
+
+        aligned = align_user_lyrics_to_timeline("完全不變的使用者歌詞", reference)
+
+        self.assertEqual("".join(line["text"] for line in aligned), "完全不變的使用者歌詞")
+        self.assertEqual([(line["start"], line["end"]) for line in aligned], [(0.0, 2.0), (2.0, 5.0)])
 
 
 class UpdateSubtitlesEndpointTests(unittest.TestCase):

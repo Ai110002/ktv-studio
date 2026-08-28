@@ -12,7 +12,7 @@ export interface Job {
   error: string | null
   song_id: string | null
   title: string
-  source_type: 'youtube' | 'upload' | 'retranscribe'
+  source_type: 'youtube' | 'upload' | 'retranscribe' | 'align_lyrics'
   url: string | null
   upload_id: string | null
   created_at: string

@@ -70,17 +70,17 @@ function LyricsRetranscriptionPanel({
             setRetranscribing(false)
             setJobId(null)
           } catch (refreshError) {
-            finishWithError(refreshError instanceof Error ? `重新辨識已完成，但無法更新字幕：${refreshError.message}` : '重新辨識已完成，但無法更新字幕')
+            finishWithError(refreshError instanceof Error ? `歌詞對齊已完成，但無法更新字幕：${refreshError.message}` : '歌詞對齊已完成，但無法更新字幕')
           }
           return
         }
         if (job.status === 'failed') {
-          finishWithError(job.error || '重新辨識失敗，請稍後再試')
+          finishWithError(job.error || '歌詞對齊失敗，請稍後再試')
           return
         }
         setProgressMessage(`${job.message}（${Math.round(job.progress * 100)}%）`)
       } catch (pollError) {
-        finishWithError(pollError instanceof Error ? `查詢重新辨識進度失敗：${pollError.message}` : '查詢重新辨識進度失敗')
+        finishWithError(pollError instanceof Error ? `查詢歌詞對齊進度失敗：${pollError.message}` : '查詢歌詞對齊進度失敗')
       } finally {
         polling = false
       }
@@ -110,14 +110,14 @@ function LyricsRetranscriptionPanel({
       return
     }
     setError('')
-    setProgressMessage('正在建立重新辨識工作…')
+    setProgressMessage('正在建立歌詞對齊工作…')
     setRetranscribing(true)
     try {
       const result = await submitLyrics(songId, text)
       setJobId(result.job_id)
     } catch (submitError) {
       setRetranscribing(false)
-      setError(submitError instanceof Error ? `送出歌詞失敗：${submitError.message}` : '送出歌詞失敗，請稍後再試')
+      setError(submitError instanceof Error ? `送出歌詞對齊失敗：${submitError.message}` : '送出歌詞對齊失敗，請稍後再試')
     }
   }
 
@@ -129,15 +129,15 @@ function LyricsRetranscriptionPanel({
         disabled={retranscribing}
         className="inline-flex items-center justify-center rounded-xl border border-indigo-400/25 bg-indigo-500/10 px-4 py-2.5 text-sm font-semibold text-indigo-100 transition hover:border-indigo-300/45 hover:bg-indigo-500/15 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {expanded ? '收起歌詞編輯' : '字幕不準？貼上正確歌詞重新辨識'}
+        {expanded ? '收起歌詞編輯' : '字幕不準？貼上正確歌詞對齊時間'}
       </button>
 
       {expanded && (
         <div className="rounded-2xl border border-slate-700/70 bg-slate-950/45 p-4 sm:p-5">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <div>
-              <h2 className="font-semibold text-slate-100">以正確歌詞重新辨識</h2>
-              <p className="mt-1 text-sm text-slate-500">會沿用既有分離音軌，不會重新下載或去人聲。</p>
+              <h2 className="font-semibold text-slate-100">以正確歌詞對齊時間</h2>
+              <p className="mt-1 text-sm text-slate-500">會完整保留你貼上的文字，只沿用既有字幕時間軸；不會重新辨識、下載或去人聲。</p>
             </div>
             <span className="text-xs tabular-nums text-slate-600">{lyricsText.length}/5000</span>
           </div>
@@ -149,13 +149,13 @@ function LyricsRetranscriptionPanel({
             maxLength={5000}
             disabled={retranscribing}
             rows={9}
-            placeholder="貼上這首歌的正確歌詞，系統會用正確歌詞重新對齊"
+            placeholder="貼上這首歌的歌詞，系統只會把原文對齊既有時間軸"
             className="mt-4 min-h-48 w-full resize-y rounded-xl border border-slate-700 bg-slate-900/85 px-3 py-3 text-sm leading-6 text-slate-100 outline-none placeholder:text-slate-600 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/20 disabled:cursor-not-allowed disabled:opacity-60"
           />
           {error && <p className="mt-3 text-sm text-rose-300">{error}</p>}
           {retranscribing && (
             <p className="mt-3 flex items-center gap-2 text-sm text-indigo-200">
-              <LoaderCircle className="animate-spin" size={16} />{progressMessage || '正在用正確歌詞重新辨識'}
+              <LoaderCircle className="animate-spin" size={16} />{progressMessage || '正在對齊歌詞時間'}
             </p>
           )}
           <div className="mt-4 flex justify-end">
@@ -165,7 +165,7 @@ function LyricsRetranscriptionPanel({
               disabled={retranscribing || !lyricsText.trim()}
               className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-950/40 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {retranscribing && <LoaderCircle className="animate-spin" size={16} />}重新辨識
+              {retranscribing && <LoaderCircle className="animate-spin" size={16} />}對齊時間
             </button>
           </div>
         </div>

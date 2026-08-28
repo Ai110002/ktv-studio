@@ -25,7 +25,7 @@ from app.config import SONGS_DIR, STATIC_DIR, UPLOAD_DIR, ensure_data_directorie
 from app.jobs import JobManager
 from app.pipeline import Pipeline
 from app.services.audio import AudioError, convert_to_mp3, convert_to_mp4
-from app.services.subtitles import build_subtitles_json
+from app.services.subtitles import build_manual_subtitles_json
 
 
 class CreateJobRequest(BaseModel):
@@ -269,10 +269,9 @@ async def update_subtitles(song_id: str, request: UpdateSubtitlesRequest) -> dic
         for line in request.lines
     ]
     try:
-        subtitles = build_subtitles_json(
+        subtitles = build_manual_subtitles_json(
             language=language,
             title=title,
-            source="manual",
             lines=lines,
         )
     except (TypeError, ValueError, KeyError) as exc:
@@ -292,7 +291,7 @@ async def update_subtitles(song_id: str, request: UpdateSubtitlesRequest) -> dic
 
 @app.post("/api/songs/{song_id}/lyrics")
 async def submit_lyrics(song_id: str, request: SubmitLyricsRequest) -> dict[str, str]:
-    """儲存使用者修正歌詞，並建立沿用既有人聲軌的重新辨識工作。"""
+    """儲存使用者歌詞，並以既有字幕時間軸對齊，不再執行語音辨識。"""
 
     try:
         song_dir, meta = _song_meta(song_id)
@@ -311,7 +310,7 @@ async def submit_lyrics(song_id: str, request: SubmitLyricsRequest) -> dict[str,
         raise HTTPException(status_code=500, detail="儲存貼上的歌詞失敗") from exc
 
     job = await job_manager.create(
-        source_type="retranscribe",
+        source_type="align_lyrics",
         url=None,
         title=title.strip(),
         song_id=song_id,

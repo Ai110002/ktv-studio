@@ -16,8 +16,14 @@ from app.services.audio import convert_to_wav, get_duration, normalize_instrumen
 from app.services.downloader import DownloadError, download_youtube
 from app.services.lyrics import fetch_lrclib_lines
 from app.services.separator import SeparationError, separate_vocals
-from app.services.subtitles import build_subtitles_json, clean_subtitle_text, normalize_language
-from app.services.transcriber import TranscriptionError, transcribe_vocals
+from app.services.subtitles import (
+    align_user_lyrics_to_timeline,
+    build_manual_subtitles_json,
+    build_subtitles_json,
+    clean_subtitle_text,
+    normalize_language,
+)
+from app.services.transcriber import transcribe_vocals
 
 
 class PipelineError(RuntimeError):
@@ -58,13 +64,13 @@ class Pipeline:
 
         return report
 
-    async def _run_retranscribe(
+    async def _run_align_user_lyrics(
         self,
         job: dict[str, Any],
         song_dir: Path,
         loop: asyncio.AbstractEventLoop,
     ) -> None:
-        """沿用既有純人聲軌，以使用者貼上的歌詞提示 Whisper。"""
+        """保留使用者歌詞原文，僅用既有字幕時間軸進行對齊。"""
 
         job_id = str(job["job_id"])
         missing_lyrics_error = "找不到貼上的歌詞，請重新送出"
@@ -85,60 +91,54 @@ class Pipeline:
         title = meta.get("title")
         artist = meta.get("artist")
         language = meta.get("language")
-        vocals_name = files.get("vocals") if isinstance(files, dict) else None
-        if not all(isinstance(value, str) and value.strip() for value in (title, language, vocals_name)):
+        if not all(isinstance(value, str) and value.strip() for value in (title, language)):
             raise PipelineError(missing_lyrics_error)
         if not isinstance(artist, str):
             raise PipelineError(missing_lyrics_error)
-        if Path(vocals_name).name != vocals_name:
-            raise PipelineError(missing_lyrics_error)
-        vocals_path = song_dir / vocals_name
-        if not vocals_path.is_file():
-            raise PipelineError(missing_lyrics_error)
 
-        await self.job_manager.set_step(job_id, "fetch", "沿用已分離音軌")
-        await self.job_manager.set_step_progress(job_id, 1.0, "沿用已分離音軌")
-        await self.job_manager.set_step(job_id, "separate", "沿用已分離音軌")
-        await self.job_manager.set_step_progress(job_id, 1.0, "沿用已分離音軌")
+        subtitle_path = song_dir / "subtitles.json"
+        if not subtitle_path.is_file():
+            raise PipelineError("找不到既有字幕時間軸，請在字幕工作台手動打點")
+        try:
+            existing_subtitles = json.loads(subtitle_path.read_text(encoding="utf-8"))
+            reference_lines = existing_subtitles.get("lines") if isinstance(existing_subtitles, dict) else None
+        except (OSError, json.JSONDecodeError) as exc:
+            raise PipelineError("讀取既有字幕時間軸失敗") from exc
+        if not isinstance(reference_lines, list):
+            raise PipelineError("找不到既有字幕時間軸，請在字幕工作台手動打點")
 
-        await self.job_manager.set_step(job_id, "transcribe", "正在用正確歌詞重新辨識")
-        transcription = await asyncio.to_thread(
-            transcribe_vocals,
-            vocals_path,
-            on_progress=self._progress_callback(loop, job_id),
-            initial_prompt=lyrics[:1500],
-        )
+        await self.job_manager.set_step(job_id, "fetch", "讀取既有字幕時間軸")
+        await self.job_manager.set_step_progress(job_id, 1.0, "讀取既有字幕時間軸")
+        await self.job_manager.set_step(job_id, "separate", "保留既有音軌")
+        await self.job_manager.set_step_progress(job_id, 1.0, "保留既有音軌")
 
-        await self.job_manager.set_step(job_id, "subtitles", "正在整理 KTV 字幕")
-        subtitles = build_subtitles_json(
+        await self.job_manager.set_step(job_id, "transcribe", "保留貼上的歌詞，對齊既有時間軸")
+        aligned_lines = align_user_lyrics_to_timeline(lyrics, reference_lines)
+        if not aligned_lines:
+            raise PipelineError("無法對齊歌詞：請先在字幕工作台建立至少一段時間軸")
+        await self.job_manager.set_step_progress(job_id, 1.0, "歌詞已對齊既有時間軸")
+
+        await self.job_manager.set_step(job_id, "subtitles", "正在寫入對齊字幕")
+        subtitles = build_manual_subtitles_json(
             language=language,
             title=title,
-            source="whisper",
-            lines=transcription.segments,
+            lines=aligned_lines,
         )
         try:
             (song_dir / "subtitles.json").write_text(
                 json.dumps(subtitles, ensure_ascii=False, indent=2), encoding="utf-8"
             )
         except OSError as exc:
-            raise PipelineError("寫入重新辨識字幕失敗") from exc
+            raise PipelineError("寫入對齊字幕失敗") from exc
         await self.job_manager.set_step_progress(
             job_id,
             1.0,
             "字幕整理完成" if subtitles["lines"] else "未偵測到可用字幕，仍可使用伴奏錄唱",
         )
 
-        await self.job_manager.set_step(job_id, "finalize", "正在完成重新辨識")
-        try:
-            duration = await asyncio.to_thread(get_duration, vocals_path)
-        except Exception:
-            try:
-                duration = float(meta.get("duration") or 0)
-            except (TypeError, ValueError):
-                duration = 0.0
-        await self.job_manager.set_step_progress(job_id, 1.0, "字幕重新辨識完成")
-        duration_note = f"（音軌約 {round(duration)} 秒）" if duration > 0 else ""
-        await self.job_manager.complete(job_id, f"已依正確歌詞重新辨識完成{duration_note}")
+        await self.job_manager.set_step(job_id, "finalize", "正在完成字幕對齊")
+        await self.job_manager.set_step_progress(job_id, 1.0, "字幕對齊完成")
+        await self.job_manager.complete(job_id, "已保留貼上的歌詞並完成時間對齊")
 
     async def run(self, job_id: str) -> None:
         job = await self.job_manager.get(job_id)
@@ -149,13 +149,13 @@ class Pipeline:
         loop = asyncio.get_running_loop()
         source_type = str(job.get("source_type"))
 
-        if source_type == "retranscribe":
+        if source_type in {"retranscribe", "align_lyrics"}:
             try:
-                await self._run_retranscribe(job, song_dir, loop)
-            except (TranscriptionError, PipelineError) as exc:
+                await self._run_align_user_lyrics(job, song_dir, loop)
+            except PipelineError as exc:
                 raise PipelineError(str(exc)) from exc
             except Exception as exc:
-                raise PipelineError(f"重新辨識歌詞時發生錯誤：{exc}") from exc
+                raise PipelineError(f"對齊歌詞時發生錯誤：{exc}") from exc
             return
 
         song_dir.mkdir(parents=True, exist_ok=True)
