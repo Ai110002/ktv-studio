@@ -11,13 +11,13 @@ echo.
 
 set "ROOT=%~dp0.."
 
-REM --- refresh PATH so freshly installed tools are visible ---
-set "PATH=%USERPROFILE%\.local\bin;%LOCALAPPDATA%\Microsoft\WinGet\Links;%PATH%"
+REM --- refresh PATH so freshly installed winget packages are visible ---
+call :refresh_paths
 
 REM --- check winget ---
 where winget >nul 2>nul
 if errorlevel 1 (
-  echo [ERROR] winget not found. Please update Windows 10/11 (winget is built-in).
+  echo [ERROR] winget not found. Please update Windows 10/11 ^(winget is built-in^).
   pause
   exit /b 1
 )
@@ -32,7 +32,7 @@ if errorlevel 1 (
     pause
     exit /b 1
   )
-  set "PATH=%USERPROFILE%\.local\bin;%PATH%"
+  call :refresh_paths
 )
 echo [OK] uv found.
 
@@ -46,8 +46,22 @@ if errorlevel 1 (
     pause
     exit /b 1
   )
+  call :refresh_paths
 )
-echo [OK] ffmpeg found.
+where ffmpeg >nul 2>nul
+if errorlevel 1 (
+  echo [ERROR] ffmpeg was installed but is not available in this terminal.
+  echo         Close this window, open a new PowerShell window, then run scripts\setup.bat again.
+  pause
+  exit /b 1
+)
+where ffprobe >nul 2>nul
+if errorlevel 1 (
+  echo [ERROR] ffprobe is missing. Re-run scripts\setup.bat.
+  pause
+  exit /b 1
+)
+echo [OK] ffmpeg and ffprobe found.
 
 REM --- install backend dependencies ---
 echo [3/3] Installing backend dependencies ^(first run downloads PyTorch, takes a while^)...
@@ -68,3 +82,11 @@ echo   First song processing downloads AI models
 echo   ^(Demucs ~330MB, Whisper medium ~1.5GB^)
 echo ============================================================
 pause
+exit /b 0
+
+:refresh_paths
+REM winget updates the persistent PATH, but the current cmd.exe keeps its old PATH.
+REM Add known package locations so setup works immediately without reopening a terminal.
+set "PATH=%USERPROFILE%\.local\bin;%LOCALAPPDATA%\Microsoft\WinGet\Links;%PATH%"
+for /f "tokens=2,*" %%A in ('reg query "HKCU\Environment" /v Path 2^>nul ^| findstr /i "Path"') do set "PATH=%%B;%PATH%"
+goto :eof

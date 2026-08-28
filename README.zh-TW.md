@@ -51,14 +51,25 @@
 Windows：
 
 ```bat
-scripts\setup.bat     :: 用 winget 自動安裝 uv + ffmpeg，接著安裝後端相依
-scripts\start.bat     :: 啟動伺服器並開啟 http://localhost:8000
+scripts\setup.bat     :: 必須先執行：用 winget 安裝 uv、ffmpeg、ffprobe，並安裝後端相依
+scripts\start.bat     :: 確認 ffmpeg/ffprobe 後啟動伺服器並開啟 http://localhost:8000
 ```
 
 第一次處理歌曲會自動下載 AI 模型（Demucs 約 330MB、Whisper medium 約 1.5GB）。
 前端已預建置並提交在 repo 內，**一般使用不需要安裝 Node.js**。
 
-> ⚠️ Windows 腳本是照 winget 標準流程撰寫，尚未在實機驗證過。
+### Windows：給 AI agent／自動化的必要步驟
+
+不要只啟動後端或直接執行 `start.bat`；音訊處理**必須**先有 `ffmpeg` 與 `ffprobe`。
+
+```bat
+scripts\setup.bat
+ffmpeg -version
+ffprobe -version
+scripts\start.bat
+```
+
+`setup.bat` 會以 `winget` 安裝正確的套件識別碼 `Gyan.FFmpeg`，並在同一個終端工作階段加入其路徑；不必關閉或重開終端。`start.bat` 也會再次尋找並驗證兩個工具。若任一驗證失敗，先重新執行 `scripts\setup.bat`，不要略過此步驟。
 
 ## 🐣 給完全不會的人：一步步安裝
 
@@ -77,7 +88,7 @@ scripts\start.bat     :: 啟動伺服器並開啟 http://localhost:8000
 1. 打開 <https://github.com/Ai110002/ktv-studio> → 點綠色 **Code** → **Download ZIP** → 解壓縮。
 2. 按 Windows 鍵，輸入「PowerShell」並開啟。
 3. 輸入 `cd Downloads\ktv-studio-main` 按 Enter（解壓到別處就改路徑）。
-4. 輸入 `.\scripts\setup.bat` 按 Enter，等它跑完（5~10 分鐘）。
+4. 輸入 `.\scripts\setup.bat` 按 Enter，等它跑完（5~10 分鐘）；它會安裝並驗證 `ffmpeg` 和 `ffprobe`。
 5. 輸入 `.\scripts\start.bat` 按 Enter，瀏覽器自動打開 App。完成！🎉
 
 **第一次使用會發生什麼：** 第一首處理的歌會下載 AI 模型

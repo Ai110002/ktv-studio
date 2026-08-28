@@ -51,14 +51,28 @@ Measured on Apple M1 (8 GB): separation ≈ 1.5–2 min per 3.5-min song (MPS), 
 Windows:
 
 ```bat
-scripts\setup.bat     :: installs uv + ffmpeg via winget, then installs backend deps
-scripts\start.bat     :: starts the server and opens http://localhost:8000
+scripts\setup.bat     :: required first: installs uv, ffmpeg, ffprobe, then backend deps
+scripts\start.bat     :: verifies ffmpeg/ffprobe, then starts the server at http://localhost:8000
 ```
 
 First song processing downloads AI models automatically (Demucs ≈ 330 MB, Whisper medium ≈ 1.5 GB).
 The frontend is pre-built and committed, so **Node.js is not required** for normal use.
 
-> ⚠️ The Windows scripts follow the standard winget flow but have not been tested on a real Windows machine yet.
+### Windows: required bootstrap for AI agents and automation
+
+Do not start the backend directly or run `start.bat` first: audio processing **requires both**
+`ffmpeg` and `ffprobe`.
+
+```bat
+scripts\setup.bat
+ffmpeg -version
+ffprobe -version
+scripts\start.bat
+```
+
+`setup.bat` installs the exact winget package ID, `Gyan.FFmpeg`, and adds its location to the
+current terminal session, so a terminal restart is not required. `start.bat` locates and verifies
+both executables again. If either verification fails, rerun `scripts\setup.bat`; do not skip it.
 
 ## 🐣 Installation for Absolute Beginners
 
@@ -77,7 +91,7 @@ If you have never used a terminal before, follow these steps:
 1. Go to <https://github.com/Ai110002/ktv-studio> → click green **Code** → **Download ZIP** → extract it.
 2. Press the Windows key, type `PowerShell` and open it.
 3. Type `cd Downloads\ktv-studio-main` (adjust if you extracted elsewhere) and press Enter.
-4. Type `.\scripts\setup.bat` and press Enter. Wait — it installs everything automatically (5–10 min).
+4. Type `.\scripts\setup.bat` and press Enter. Wait — it installs everything automatically (5–10 min), including and verifying `ffmpeg` and `ffprobe`.
 5. Type `.\scripts\start.bat` and press Enter. Your browser opens the app. Done! 🎉
 
 **What happens on first use:** the first song you process downloads the AI models
