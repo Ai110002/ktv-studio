@@ -285,9 +285,10 @@ export default function SubtitleEditor({
     }
     const line = draftLines[index]
     if (!line) return
-    const start = index > 0 ? draftLines[index - 1].end : getAudioTime()
-    const blankLine: SubtitleDraftLine = { start, end: Math.max(start, line.start), text: '', words: null, blank: true }
-    commitDraft([...draftLines.slice(0, index), blankLine, ...draftLines.slice(index)], index)
+    const start = Math.max(line.start, getAudioTime())
+    const currentLine = { ...line, end: start, words: null }
+    const blankLine: SubtitleDraftLine = { start, end: start, text: '', words: null, blank: true }
+    commitDraft([...draftLines.slice(0, index), currentLine, blankLine, ...draftLines.slice(index + 1)], index + 1)
   }
 
   const splitLine = (index: number) => {
