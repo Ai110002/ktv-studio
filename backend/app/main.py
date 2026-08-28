@@ -55,6 +55,7 @@ class SubtitleLineUpdate(BaseModel):
     start: float
     end: float
     text: str
+    blank: bool = False
 
     @field_validator("start", "end")
     @classmethod
@@ -65,11 +66,17 @@ class SubtitleLineUpdate(BaseModel):
 
     @field_validator("text")
     @classmethod
-    def validate_text(cls, value: str) -> str:
-        text = value.strip()
-        if not 1 <= len(text) <= 500:
+    def normalize_text(cls, value: str) -> str:
+        return value.strip()
+
+    @model_validator(mode="after")
+    def validate_text(self) -> "SubtitleLineUpdate":
+        if self.blank:
+            self.text = ""
+            return self
+        if not 1 <= len(self.text) <= 500:
             raise ValueError("每句字幕文字需為 1 到 500 字元")
-        return text
+        return self
 
     @model_validator(mode="after")
     def validate_time_order(self) -> "SubtitleLineUpdate":

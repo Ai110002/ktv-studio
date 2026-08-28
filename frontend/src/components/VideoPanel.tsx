@@ -63,13 +63,10 @@ function videoSettingsKey(songId: string) {
 
 function currentLine(subtitles: Subtitles | null, time: number) {
   const lines = subtitles?.lines || []
-  if (!lines.length) return undefined
-  const matching = lines.find((line) => time >= line.start && time <= line.end)
-  if (matching) return matching
-  const next = lines.find((line) => time < line.start)
-  if (!next) return lines[lines.length - 1]
-  const index = lines.indexOf(next)
-  return index > 0 ? lines[index - 1] : lines[0]
+  return lines.find((line) => {
+    if (line.blank || !line.text.trim() || time < line.start || time >= line.end) return false
+    return line.words?.length ? line.words.some((word) => time >= word.start && time < word.end) : true
+  })
 }
 
 /**

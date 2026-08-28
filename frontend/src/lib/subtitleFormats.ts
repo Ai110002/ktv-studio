@@ -3,6 +3,7 @@ export type SubtitleDraftLine = {
   end: number
   text: string
   words: null
+  blank?: boolean
 }
 
 const MAX_SUBTITLE_LINES = 2000
@@ -53,7 +54,7 @@ function makeLine(start: number, end: number, text: string): SubtitleDraftLine |
   if (!cleaned) return null
   const safeStart = roundTime(start)
   const safeEnd = roundTime(Math.max(safeStart, end))
-  return { start: safeStart, end: safeEnd, text: cleaned, words: null }
+  return { start: safeStart, end: safeEnd, text: cleaned, words: null, blank: false }
 }
 
 function joinCueText(lines: string[]): string {

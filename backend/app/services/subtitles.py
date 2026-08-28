@@ -156,13 +156,14 @@ def build_manual_subtitles_json(
     output_lines: list[dict[str, Any]] = []
     for raw_line in lines:
         text = str(raw_line.get("text", "")).strip()
-        if not text:
+        blank = bool(raw_line.get("blank", False))
+        if not text and not blank:
             continue
         start = round(float(raw_line.get("start", 0)), 3)
         end = round(float(raw_line.get("end", start)), 3)
         if end < start:
             end = start
-        line: dict[str, Any] = {"start": start, "end": end, "text": text, "words": None}
+        line: dict[str, Any] = {"start": start, "end": end, "text": text, "words": None, "blank": blank}
         if resolved_language == "ja":
             line["romaji"] = ja_to_romaji(text)
         output_lines.append(line)

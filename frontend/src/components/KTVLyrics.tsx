@@ -16,6 +16,12 @@ function seekTo(audioRef: RefObject<HTMLAudioElement | null>, line: SubtitleLine
   })
 }
 
+function isLineActive(line: SubtitleLine, time: number): boolean {
+  if (line.blank || !line.text.trim() || time < line.start || time >= line.end) return false
+  if (line.words?.length) return line.words.some((word) => time >= word.start && time < word.end)
+  return true
+}
+
 function PreviewLine({
   line,
   audioRef,
@@ -55,15 +61,14 @@ export default function KTVLyrics({ subtitles, audioRef }: KTVLyricsProps) {
   const lines = subtitles?.lines || []
   const currentIndex = useMemo(() => {
     if (!lines.length) return -1
-    const matching = lines.findIndex((line) => time >= line.start && time <= line.end)
-    if (matching >= 0) return matching
-    const next = lines.findIndex((line) => time < line.start)
-    if (next === 0) return 0
-    return next > 0 ? next - 1 : Math.max(0, lines.length - 1)
+    return lines.findIndex((line) => isLineActive(line, time))
   }, [lines, time])
   const current = currentIndex >= 0 ? lines[currentIndex] : undefined
   const isJapanese = subtitles?.language === 'ja'
 
+  if (!current && lines.length) {
+    return <section className="panel min-h-72" aria-label="目前沒有字幕" />
+  }
   if (!current) {
     return (
       <section className="panel grid min-h-72 place-items-center p-6 text-center">

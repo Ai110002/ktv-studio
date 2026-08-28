@@ -55,6 +55,7 @@ export interface SubtitleLine {
   text: string
   romaji?: string
   words: SubtitleWord[] | null
+  blank?: boolean
 }
 
 export interface Subtitles {
@@ -129,13 +130,13 @@ export function getSubtitles(songId: string) {
 
 export function updateSubtitles(
   songId: string,
-  lines: Array<Pick<SubtitleLine, 'start' | 'end' | 'text'>>,
+  lines: Array<Pick<SubtitleLine, 'start' | 'end' | 'text' | 'blank'>>,
 ) {
   return request<Subtitles>(`/api/songs/${encodeURIComponent(songId)}/subtitles`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      lines: lines.map(({ start, end, text }) => ({ start, end, text })),
+      lines: lines.map(({ start, end, text, blank }) => ({ start, end, text, blank: Boolean(blank) })),
     }),
   })
 }

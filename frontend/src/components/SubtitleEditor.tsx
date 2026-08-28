@@ -36,6 +36,7 @@ function toDraftLines(lines: SubtitleLine[] | undefined): SubtitleDraftLine[] {
     end: Number.isFinite(line.end) ? Math.max(0, line.end) : 0,
     text: line.text,
     words: null,
+    blank: Boolean(line.blank),
   }))
 }
 
@@ -45,7 +46,7 @@ function signatureForSubtitles(subtitles: Subtitles | null): string {
     language: subtitles.language,
     source: subtitles.source,
     title: subtitles.title,
-    lines: subtitles.lines.map(({ start, end, text }) => ({ start, end, text })),
+    lines: subtitles.lines.map(({ start, end, text, blank }) => ({ start, end, text, blank: Boolean(blank) })),
   })
 }
 
@@ -99,7 +100,7 @@ function validationMessage(lines: SubtitleDraftLine[], timeInputs: DraftTimeInpu
     const [, index, field] = key.split(':')
     return `第 ${Number(index) + 1} 句的${field === 'start' ? '開始' : '結束'}時間尚未填寫完整`
   }
-  const emptyIndex = lines.findIndex((line) => !line.text.trim())
+  const emptyIndex = lines.findIndex((line) => !line.blank && !line.text.trim())
   if (emptyIndex >= 0) return `第 ${emptyIndex + 1} 句沒有文字，請補上後再儲存`
   const longIndex = lines.findIndex((line) => line.text.trim().length > 500)
   if (longIndex >= 0) return `第 ${longIndex + 1} 句超過 500 字元`
@@ -277,6 +278,18 @@ export default function SubtitleEditor({
     commitDraft(nextLines, index + 1 < draftLines.length ? index + 1 : index)
   }
 
+  const leaveBlank = (index = selectedIndex) => {
+    if (draftLines.length >= MAX_SUBTITLE_LINES) {
+      setActionError(`字幕最多支援 ${MAX_SUBTITLE_LINES} 行。`)
+      return
+    }
+    const line = draftLines[index]
+    if (!line) return
+    const start = index > 0 ? draftLines[index - 1].end : getAudioTime()
+    const blankLine: SubtitleDraftLine = { start, end: Math.max(start, line.start), text: '', words: null, blank: true }
+    commitDraft([...draftLines.slice(0, index), blankLine, ...draftLines.slice(index)], index)
+  }
+
   const splitLine = (index: number) => {
     const line = draftLines[index]
     const textarea = textareaRefs.current[index]
@@ -336,7 +349,7 @@ export default function SubtitleEditor({
     const lastLine = draftLines[draftLines.length - 1]
     const start = lastLine && Number.isFinite(lastLine.end) ? lastLine.end : 0
     commitDraft(
-      [...draftLines, { start, end: start, text: '', words: null }],
+      [...draftLines, { start, end: start, text: '', words: null, blank: false }],
       draftLines.length,
     )
   }
@@ -394,7 +407,7 @@ export default function SubtitleEditor({
     try {
       const response = await updateSubtitles(
         songId,
-        draftLines.map(({ start, end, text }) => ({ start, end, text: text.trim() })),
+        draftLines.map(({ start, end, text, blank }) => ({ start, end, text: blank ? '' : text.trim(), blank: Boolean(blank) })),
       )
       const nextLines = toDraftLines(response.lines)
       setDraftLines(nextLines)
@@ -526,17 +539,18 @@ export default function SubtitleEditor({
           )}
 
           {selectedLine && (
-            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-indigo-400/20 bg-indigo-500/10 px-3.5 py-3">
-              <div className="mr-auto min-w-44">
+            <div className="grid gap-2 rounded-xl border border-indigo-400/20 bg-indigo-500/10 px-3.5 py-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center">
+              <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-indigo-300">目前選取</p>
                 <p className="mt-1 truncate text-sm font-semibold text-slate-100">第 {selectedIndex + 1} 句：{selectedLine.text || '尚未輸入文字'}</p>
               </div>
-              <span className="text-xs tabular-nums text-indigo-200">現在 {formatCueTime(currentTime)}</span>
+              <span className="whitespace-nowrap text-xs tabular-nums text-indigo-200">現在 {formatCueTime(currentTime)}</span>
+              <div className="grid shrink-0 grid-cols-2 gap-2 sm:flex">
               <button
                 type="button"
                 onClick={() => markStart()}
                 disabled={busy}
-                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-indigo-300/30 bg-indigo-500/20 px-3 text-xs font-semibold text-indigo-100 transition hover:bg-indigo-500/35 disabled:cursor-not-allowed disabled:opacity-45"
+                className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-indigo-300/30 bg-indigo-500/20 px-3 text-xs font-semibold text-indigo-100 transition hover:bg-indigo-500/35 disabled:cursor-not-allowed disabled:opacity-45"
               >
                 <Flag size={14} />標記這句開始
               </button>
@@ -544,10 +558,14 @@ export default function SubtitleEditor({
                 type="button"
                 onClick={() => markEndAndNext()}
                 disabled={busy}
-                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-indigo-400 px-3 text-xs font-bold text-slate-950 transition hover:bg-indigo-300 disabled:cursor-not-allowed disabled:opacity-45"
+                className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-indigo-400 px-3 text-xs font-bold text-slate-950 transition hover:bg-indigo-300 disabled:cursor-not-allowed disabled:opacity-45"
               >
                 <Flag size={14} />標記結束並下一句
               </button>
+              <button type="button" onClick={() => leaveBlank()} disabled={busy} className="col-span-2 inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-cyan-300/30 bg-cyan-500/10 px-3 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-45 sm:col-span-1">
+                留空白
+              </button>
+              </div>
             </div>
           )}
 
@@ -603,7 +621,7 @@ export default function SubtitleEditor({
                         <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
                           <span className={unaligned ? 'text-amber-300' : 'text-emerald-300'}>{unaligned ? '待對齊' : '已對齊'}</span>
                           <span>·</span>
-                          <span>{line.text.length}/500 字</span>
+                          <span>{line.blank ? '間奏留空白' : `${line.text.length}/500 字`}</span>
                           <span>·</span>
                           <span className="tabular-nums">{formatCueTime(line.start)} → {formatCueTime(line.end)}</span>
                         </div>
@@ -642,6 +660,7 @@ export default function SubtitleEditor({
                       >
                         <Play size={14} className="fill-current" />跳至開始
                       </button>
+                      <button type="button" onClick={() => leaveBlank(index)} disabled={busy} className="inline-flex min-h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 text-xs font-semibold text-cyan-200 transition hover:bg-cyan-500/15 disabled:cursor-not-allowed disabled:opacity-45">留空白</button>
                     </div>
 
                     <div className="mt-2 flex flex-wrap gap-2 border-t border-slate-800/80 pt-2.5">
