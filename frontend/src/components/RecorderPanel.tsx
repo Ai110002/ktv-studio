@@ -19,6 +19,8 @@ export default function RecorderPanel({ songId, engine, recordingLocked }: Recor
     setMicVolume,
     monitorEnabled,
     setMonitoring,
+    noiseReductionEnabled,
+    setNoiseReduction,
     enable,
     release,
     error: microphoneIssue,
@@ -169,6 +171,19 @@ export default function RecorderPanel({ songId, engine, recordingLocked }: Recor
             className={`rounded-md px-2.5 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-45 ${monitorEnabled ? 'bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/30' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
           >
             {monitorEnabled ? '關閉耳返' : '開啟耳返'}
+          </button>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-800 bg-slate-900/55 px-3 py-2.5">
+          <div className="text-xs text-slate-300">
+            <span className="font-semibold text-indigo-200">背景降噪：</span>{noiseReductionEnabled ? '已開啟（降低風扇與規律雜音）' : '已關閉（保留完整原音）'}
+          </div>
+          <button
+            type="button"
+            onClick={() => void setNoiseReduction(!noiseReductionEnabled)}
+            disabled={!micReady || recording}
+            className={`rounded-md px-2.5 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-45 ${noiseReductionEnabled ? 'bg-indigo-500/20 text-indigo-100 hover:bg-indigo-500/30' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+          >
+            {noiseReductionEnabled ? '關閉降噪' : '開啟降噪'}
           </button>
         </div>
       </div>

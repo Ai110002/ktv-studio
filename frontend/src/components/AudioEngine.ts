@@ -98,6 +98,7 @@ export function useAudioEngine(audioRef: RefObject<HTMLAudioElement | null>): En
 interface MicChain {
   stream: MediaStream
   source: MediaStreamAudioSourceNode
+  highPass: BiquadFilterNode
   analyser: AnalyserNode
   gain: GainNode
   monitorGain: GainNode
@@ -124,6 +125,7 @@ export function useMicrophone(engine: AudioEngine | null) {
   const [micLevel, setMicLevel] = useState(0)
   const [micVolume, setMicVolume] = useState(1)
   const [monitorEnabled, setMonitorEnabledState] = useState(false)
+  const [noiseReductionEnabled, setNoiseReductionEnabled] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const release = useCallback(() => {
@@ -131,6 +133,7 @@ export function useMicrophone(engine: AudioEngine | null) {
     if (!chain) return
     window.cancelAnimationFrame(chain.frame)
     chain.source.disconnect()
+    chain.highPass.disconnect()
     chain.analyser.disconnect()
     chain.gain.disconnect()
     chain.monitorGain.disconnect()
@@ -160,13 +163,18 @@ export function useMicrophone(engine: AudioEngine | null) {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: false,
-          noiseSuppression: false,
+          noiseSuppression: noiseReductionEnabled,
           autoGainControl: false,
           channelCount: { ideal: 1 },
           sampleRate: { ideal: 48000 },
         },
       })
       const source = engine.context.createMediaStreamSource(stream)
+      const highPass = engine.context.createBiquadFilter()
+      highPass.type = 'highpass'
+      highPass.Q.value = 0.7
+      // 風扇震動與桌面低頻隆聲通常集中在 85Hz 以下；保留人聲主體。
+      highPass.frequency.value = noiseReductionEnabled ? 85 : 10
       const analyser = engine.context.createAnalyser()
       analyser.fftSize = 256
       const gain = engine.context.createGain()
@@ -174,14 +182,15 @@ export function useMicrophone(engine: AudioEngine | null) {
       const monitorGain = engine.context.createGain()
       // 預設不耳返，避免使用喇叭時形成回授；使用耳機時可由使用者開啟。
       monitorGain.gain.value = monitorEnabled ? 1 : 0
-      source.connect(analyser)
+      source.connect(highPass)
+      highPass.connect(analyser)
       analyser.connect(gain)
       gain.connect(engine.recordDestination)
       gain.connect(monitorGain)
       monitorGain.connect(engine.context.destination)
 
       const samples = new Uint8Array(analyser.fftSize)
-      const chain: MicChain = { stream, source, analyser, gain, monitorGain, frame: 0 }
+      const chain: MicChain = { stream, source, highPass, analyser, gain, monitorGain, frame: 0 }
       const measure = () => {
         analyser.getByteTimeDomainData(samples)
         let sum = 0
@@ -201,7 +210,7 @@ export function useMicrophone(engine: AudioEngine | null) {
       setError(microphoneError(micError))
       return false
     }
-  }, [engine, micVolume, monitorEnabled])
+  }, [engine, micVolume, monitorEnabled, noiseReductionEnabled])
 
   const setVolume = useCallback((value: number) => {
     setMicVolume(value)
@@ -217,6 +226,23 @@ export function useMicrophone(engine: AudioEngine | null) {
     }
   }, [engine])
 
+  const setNoiseReduction = useCallback(async (enabled: boolean): Promise<boolean> => {
+    const chain = micChainRef.current
+    try {
+      const track = chain?.stream.getAudioTracks()[0]
+      if (track) await track.applyConstraints({ noiseSuppression: enabled })
+      if (chain && engine) {
+        chain.highPass.frequency.setTargetAtTime(enabled ? 85 : 10, engine.context.currentTime, 0.01)
+      }
+      setNoiseReductionEnabled(enabled)
+      setError(null)
+      return true
+    } catch (noiseError) {
+      setError(noiseError instanceof Error ? `無法切換背景降噪：${noiseError.message}` : '無法切換背景降噪，請關閉後重新啟用麥克風。')
+      return false
+    }
+  }, [engine])
+
   return {
     micReady,
     micLevel,
@@ -224,6 +250,8 @@ export function useMicrophone(engine: AudioEngine | null) {
     setMicVolume: setVolume,
     monitorEnabled,
     setMonitoring,
+    noiseReductionEnabled,
+    setNoiseReduction,
     enable,
     release,
     error,
