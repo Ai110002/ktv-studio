@@ -38,17 +38,18 @@ function LyricsRetranscriptionPanel({
   const [lyricsText, setLyricsText] = useState('')
   const [jobId, setJobId] = useState<string | null>(null)
   const [retranscribing, setRetranscribing] = useState(false)
+  const [progressMessage, setProgressMessage] = useState('')
   const [error, setError] = useState('')
 
   useEffect(() => {
     if (!jobId) return
     let active = true
     let polling = false
-    const startedAt = Date.now()
 
     const finishWithError = (message: string) => {
       if (!active) return
       setError(message)
+      setProgressMessage('')
       setRetranscribing(false)
       setJobId(null)
     }
@@ -65,6 +66,7 @@ function LyricsRetranscriptionPanel({
             if (!active) return
             onSubtitlesUpdated(refreshed)
             setError('')
+            setProgressMessage('')
             setRetranscribing(false)
             setJobId(null)
           } catch (refreshError) {
@@ -76,9 +78,7 @@ function LyricsRetranscriptionPanel({
           finishWithError(job.error || '重新辨識失敗，請稍後再試')
           return
         }
-        if (Date.now() - startedAt >= 60_000) {
-          finishWithError('重新辨識尚未完成，請稍後重新整理頁面確認結果')
-        }
+        setProgressMessage(`${job.message}（${Math.round(job.progress * 100)}%）`)
       } catch (pollError) {
         finishWithError(pollError instanceof Error ? `查詢重新辨識進度失敗：${pollError.message}` : '查詢重新辨識進度失敗')
       } finally {
@@ -110,6 +110,7 @@ function LyricsRetranscriptionPanel({
       return
     }
     setError('')
+    setProgressMessage('正在建立重新辨識工作…')
     setRetranscribing(true)
     try {
       const result = await submitLyrics(songId, text)
@@ -154,7 +155,7 @@ function LyricsRetranscriptionPanel({
           {error && <p className="mt-3 text-sm text-rose-300">{error}</p>}
           {retranscribing && (
             <p className="mt-3 flex items-center gap-2 text-sm text-indigo-200">
-              <LoaderCircle className="animate-spin" size={16} />正在用正確歌詞重新辨識（約 1~3 分鐘）
+              <LoaderCircle className="animate-spin" size={16} />{progressMessage || '正在用正確歌詞重新辨識'}
             </p>
           )}
           <div className="mt-4 flex justify-end">
