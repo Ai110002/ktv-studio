@@ -539,13 +539,14 @@ export default function SubtitleEditor({
           )}
 
           {selectedLine && (
-            <div className="grid gap-2 rounded-xl border border-indigo-400/20 bg-indigo-500/10 px-3.5 py-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center">
+            <div className="grid gap-2 rounded-xl border border-indigo-400/20 bg-indigo-500/10 px-3.5 py-3">
               <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-indigo-300">目前選取</p>
                 <p className="mt-1 truncate text-sm font-semibold text-slate-100">第 {selectedIndex + 1} 句：{selectedLine.text || '尚未輸入文字'}</p>
               </div>
-              <span className="whitespace-nowrap text-xs tabular-nums text-indigo-200">現在 {formatCueTime(currentTime)}</span>
-              <div className="grid shrink-0 grid-cols-2 gap-2 sm:flex">
+              <div className="flex min-w-0 flex-wrap items-center gap-2 border-t border-indigo-300/10 pt-2">
+              <span className="mr-auto whitespace-nowrap text-xs tabular-nums text-indigo-200">現在 {formatCueTime(currentTime)}</span>
+              <div className="grid shrink-0 grid-cols-3 gap-2">
               <button
                 type="button"
                 onClick={() => markStart()}
@@ -562,9 +563,10 @@ export default function SubtitleEditor({
               >
                 <Flag size={14} />標記結束並下一句
               </button>
-              <button type="button" onClick={() => leaveBlank()} disabled={busy} className="col-span-2 inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-cyan-300/30 bg-cyan-500/10 px-3 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-45 sm:col-span-1">
+              <button type="button" onClick={() => leaveBlank()} disabled={busy} className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-cyan-300/30 bg-cyan-500/10 px-3 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-45">
                 留空白
               </button>
+              </div>
               </div>
             </div>
           )}
