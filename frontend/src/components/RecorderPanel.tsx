@@ -1,4 +1,4 @@
-import { Circle, Download, LoaderCircle, Mic, MicOff, Square, Volume2 } from 'lucide-react'
+import { Circle, Download, Headphones, LoaderCircle, Mic, MicOff, Square, Volume2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { exportRecording } from '../api'
 import { useMicrophone, type AudioEngine } from './AudioEngine'
@@ -12,7 +12,17 @@ interface RecorderPanelProps {
 export default function RecorderPanel({ songId, engine, recordingLocked }: RecorderPanelProps) {
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
-  const { micReady, micLevel, micVolume, setMicVolume, enable, release, error: microphoneIssue } = useMicrophone(engine)
+  const {
+    micReady,
+    micLevel,
+    micVolume,
+    setMicVolume,
+    monitorEnabled,
+    setMonitoring,
+    enable,
+    release,
+    error: microphoneIssue,
+  } = useMicrophone(engine)
   const [recording, setRecording] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [exportUrl, setExportUrl] = useState<string | null>(null)
@@ -117,7 +127,7 @@ export default function RecorderPanel({ songId, engine, recordingLocked }: Recor
       </div>
 
       <p className="mt-3 rounded-lg border border-indigo-300/15 bg-indigo-500/5 px-3 py-2 text-xs leading-5 text-slate-400">
-        已啟用低延遲原音模式。藍牙耳機仍可能由硬體額外帶來約 100–300ms 延遲；要抓拍最準，請使用有線或 USB 低延遲耳機。
+        已啟用低延遲原音模式。耳返會把麥克風直接送到耳機；使用喇叭時請保持關閉，避免回授。藍牙耳機仍可能由硬體額外帶來約 100–300ms 延遲；要抓拍最準，請使用有線或 USB 低延遲耳機。
         {engine && <span className="ml-1 text-indigo-200">瀏覽器估計輸出緩衝：約 {engine.getEstimatedOutputLatencyMs()}ms。</span>}
       </p>
 
@@ -147,6 +157,20 @@ export default function RecorderPanel({ songId, engine, recordingLocked }: Recor
           />
           <span className="w-9 text-right tabular-nums">{Math.round(micVolume * 100)}%</span>
         </label>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-800 bg-slate-900/55 px-3 py-2.5">
+          <div className="flex items-center gap-2 text-xs text-slate-300">
+            <Headphones size={16} className="text-indigo-300" />
+            <span>耳返：{monitorEnabled ? '聽到自己的聲音' : '不聽自己的聲音'}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setMonitoring(!monitorEnabled)}
+            disabled={!micReady}
+            className={`rounded-md px-2.5 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-45 ${monitorEnabled ? 'bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/30' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+          >
+            {monitorEnabled ? '關閉耳返' : '開啟耳返'}
+          </button>
+        </div>
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">

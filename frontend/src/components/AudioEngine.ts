@@ -100,6 +100,7 @@ interface MicChain {
   source: MediaStreamAudioSourceNode
   analyser: AnalyserNode
   gain: GainNode
+  monitorGain: GainNode
   frame: number
 }
 
@@ -122,6 +123,7 @@ export function useMicrophone(engine: AudioEngine | null) {
   const [micReady, setMicReady] = useState(false)
   const [micLevel, setMicLevel] = useState(0)
   const [micVolume, setMicVolume] = useState(1)
+  const [monitorEnabled, setMonitorEnabledState] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const release = useCallback(() => {
@@ -131,6 +133,7 @@ export function useMicrophone(engine: AudioEngine | null) {
     chain.source.disconnect()
     chain.analyser.disconnect()
     chain.gain.disconnect()
+    chain.monitorGain.disconnect()
     chain.stream.getTracks().forEach((track) => track.stop())
     micChainRef.current = null
     setMicReady(false)
@@ -168,12 +171,17 @@ export function useMicrophone(engine: AudioEngine | null) {
       analyser.fftSize = 256
       const gain = engine.context.createGain()
       gain.gain.value = micVolume
+      const monitorGain = engine.context.createGain()
+      // 預設不耳返，避免使用喇叭時形成回授；使用耳機時可由使用者開啟。
+      monitorGain.gain.value = monitorEnabled ? 1 : 0
       source.connect(analyser)
       analyser.connect(gain)
       gain.connect(engine.recordDestination)
+      gain.connect(monitorGain)
+      monitorGain.connect(engine.context.destination)
 
       const samples = new Uint8Array(analyser.fftSize)
-      const chain: MicChain = { stream, source, analyser, gain, frame: 0 }
+      const chain: MicChain = { stream, source, analyser, gain, monitorGain, frame: 0 }
       const measure = () => {
         analyser.getByteTimeDomainData(samples)
         let sum = 0
@@ -193,7 +201,7 @@ export function useMicrophone(engine: AudioEngine | null) {
       setError(microphoneError(micError))
       return false
     }
-  }, [engine, micVolume])
+  }, [engine, micVolume, monitorEnabled])
 
   const setVolume = useCallback((value: number) => {
     setMicVolume(value)
@@ -201,7 +209,25 @@ export function useMicrophone(engine: AudioEngine | null) {
     if (chain && engine) chain.gain.gain.setTargetAtTime(value, engine.context.currentTime, 0.015)
   }, [engine])
 
-  return { micReady, micLevel, micVolume, setMicVolume: setVolume, enable, release, error }
+  const setMonitoring = useCallback((enabled: boolean) => {
+    setMonitorEnabledState(enabled)
+    const chain = micChainRef.current
+    if (chain && engine) {
+      chain.monitorGain.gain.setTargetAtTime(enabled ? 1 : 0, engine.context.currentTime, 0.01)
+    }
+  }, [engine])
+
+  return {
+    micReady,
+    micLevel,
+    micVolume,
+    setMicVolume: setVolume,
+    monitorEnabled,
+    setMonitoring,
+    enable,
+    release,
+    error,
+  }
 }
 
 declare global {
