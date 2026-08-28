@@ -575,7 +575,27 @@ export default function SubtitleEditor({
               >
                 <Flag size={14} />標記結束並下一句
               </button>
-              <button type="button" onClick={() => leaveBlank()} disabled={busy} className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-cyan-300/30 bg-cyan-500/10 px-3 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-45">
+              <div className="flex min-h-9 items-stretch gap-1.5">
+                <button
+                  type="button"
+                  onClick={playAudio}
+                  disabled={busy}
+                  className="inline-flex min-w-0 flex-1 items-center justify-center gap-1 rounded-lg border border-emerald-300/25 bg-emerald-500/10 px-2 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-45"
+                  aria-label="播放歌曲"
+                >
+                  <Play size={13} className="fill-current" />播放
+                </button>
+                <button
+                  type="button"
+                  onClick={pauseAudio}
+                  disabled={busy}
+                  className="inline-flex min-w-0 flex-1 items-center justify-center gap-1 rounded-lg border border-slate-600 bg-slate-800/75 px-2 text-xs font-semibold text-slate-200 transition hover:border-slate-500 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-45"
+                  aria-label="暫停歌曲"
+                >
+                  <Pause size={13} className="fill-current" />暫停
+                </button>
+              </div>
+              <button type="button" onClick={() => leaveBlank()} disabled={busy} className="col-span-3 inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-cyan-300/30 bg-cyan-500/10 px-3 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-45">
                 留空白
               </button>
               </div>
@@ -638,26 +658,6 @@ export default function SubtitleEditor({
                           <span>{line.blank ? '間奏留空白' : `${line.text.length}/500 字`}</span>
                           <span>·</span>
                           <span className="tabular-nums">{formatCueTime(line.start)} → {formatCueTime(line.end)}</span>
-                        </div>
-                        <div className="mt-2 flex items-center justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={playAudio}
-                            disabled={busy}
-                            className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-emerald-300/25 bg-emerald-500/10 px-2.5 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-45"
-                            aria-label={`播放第 ${index + 1} 句附近的歌曲位置`}
-                          >
-                            <Play size={13} className="fill-current" />播放
-                          </button>
-                          <button
-                            type="button"
-                            onClick={pauseAudio}
-                            disabled={busy}
-                            className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-slate-600 bg-slate-800/75 px-2.5 text-xs font-semibold text-slate-200 transition hover:border-slate-500 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-45"
-                            aria-label="暫停歌曲播放"
-                          >
-                            <Pause size={13} className="fill-current" />暫停
-                          </button>
                         </div>
                       </div>
                     </div>
