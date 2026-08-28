@@ -17,6 +17,7 @@ simple 7-band EQ, and lets you **record audio or video covers** — all processe
   - **Lyrics library (LRCLIB)** — correct lyrics + timestamps for most popular songs (JP/CN/EN), no AI listening needed
   - Speech recognition (faster-whisper) as last resort, with **word-level timestamps**
 - **Paste the correct lyrics** in the studio to re-align subtitles when recognition is wrong (Whisper `initial_prompt`)
+- **Subtitle workbench** — edit lyric text immediately, import TXT/LRC/SRT/VTT files, and mark each line against playback time manually; edits are saved locally without running AI again
 - **Japanese lyrics come with romaji** (per-word + per-line); Chinese is converted to Traditional (Taiwan)
 - **KTV word-by-word highlight**, click a line to seek
 - **7-band EQ** with presets (Flat / Soft / De-harsh / Bright / Bass boost) — real-time in the browser
@@ -103,7 +104,8 @@ This happens once; afterwards everything runs offline (except YouTube downloads)
 1. Paste a YouTube URL or drop an audio file.
 2. Wait for the 5 steps: fetch → separate → transcribe → subtitles → finalize.
 3. Press play, adjust EQ if needed, sing along with the subtitles.
-4. Record: **audio-only** (mic + instrumental → MP3) or **video** (webcam + subtitles → MP4).
+4. If the lyrics are wrong, open **Subtitle Workbench**: edit a line directly, import TXT/LRC/SRT/VTT, or paste plain lyrics. For plain text, play the song and use **Mark start** / **Mark end & next** to align each line, then save.
+5. Record: **audio-only** (mic + instrumental → MP3) or **video** (webcam + subtitles → MP4).
    Video and audio recording are mutually exclusive.
 
 ### Development
