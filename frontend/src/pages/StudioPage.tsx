@@ -7,19 +7,21 @@ import {
   SkipBack,
   Volume2,
 } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { audioUrl, formatDuration, getJob, getSong, getSubtitles, submitLyrics, type Song, type Subtitles } from '../api'
 import { useAudioEngine } from '../components/AudioEngine'
 import Equalizer from '../components/Equalizer'
 import KTVLyrics from '../components/KTVLyrics'
 import RecorderPanel from '../components/RecorderPanel'
+import SubtitleEditor from '../components/SubtitleEditor'
 import VideoPanel from '../components/VideoPanel'
 
 function subtitleSourceLabel(subtitles: Subtitles | null): string {
   if (subtitles?.source === 'youtube') return 'YouTube 字幕'
   if (subtitles?.source === 'lrclib') return '歌詞庫'
   if (subtitles?.source === 'whisper') return '語音辨識'
+  if (subtitles?.source === 'manual') return '手動編輯'
   return '無字幕'
 }
 
@@ -189,6 +191,10 @@ function StudioWorkspace({
   const [masterVolume, setMasterVolume] = useState(0.9)
   const [playError, setPlayError] = useState('')
   const [videoRecording, setVideoRecording] = useState(false)
+  const editorSubtitles = useMemo<Subtitles>(
+    () => subtitles || { language: song.language || 'und', source: 'manual', title: song.title, lines: [] },
+    [song.language, song.title, subtitles],
+  )
 
   useEffect(() => {
     const audio = audioRef.current
@@ -309,6 +315,13 @@ function StudioWorkspace({
         <VideoPanel songId={song.id} engine={engine} subtitles={subtitles} audioRef={audioRef} onRecordingChange={setVideoRecording} />
         <div className="space-y-4">
           <KTVLyrics subtitles={subtitles} audioRef={audioRef} />
+          <SubtitleEditor
+            songId={song.id}
+            subtitles={editorSubtitles}
+            audioRef={audioRef}
+            duration={duration}
+            onSubtitlesUpdated={onSubtitlesUpdated}
+          />
           <LyricsRetranscriptionPanel songId={song.id} subtitles={subtitles} onSubtitlesUpdated={onSubtitlesUpdated} />
         </div>
       </div>

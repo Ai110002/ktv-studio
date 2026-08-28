@@ -59,7 +59,7 @@ export interface SubtitleLine {
 
 export interface Subtitles {
   language: string
-  source: 'whisper' | 'youtube' | 'lrclib'
+  source: 'whisper' | 'youtube' | 'lrclib' | 'manual'
   title: string
   lines: SubtitleLine[]
 }
@@ -125,6 +125,19 @@ export function getSong(songId: string) {
 
 export function getSubtitles(songId: string) {
   return request<Subtitles>(`/api/songs/${encodeURIComponent(songId)}/subtitles`)
+}
+
+export function updateSubtitles(
+  songId: string,
+  lines: Array<Pick<SubtitleLine, 'start' | 'end' | 'text'>>,
+) {
+  return request<Subtitles>(`/api/songs/${encodeURIComponent(songId)}/subtitles`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      lines: lines.map(({ start, end, text }) => ({ start, end, text })),
+    }),
+  })
 }
 
 export function submitLyrics(songId: string, text: string) {

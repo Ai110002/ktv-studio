@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import mimetypes
 import re
 import shutil
@@ -18,12 +19,13 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.config import SONGS_DIR, STATIC_DIR, UPLOAD_DIR, ensure_data_directories
 from app.jobs import JobManager
 from app.pipeline import Pipeline
 from app.services.audio import AudioError, convert_to_mp3, convert_to_mp4
+from app.services.subtitles import build_subtitles_json
 
 
 class CreateJobRequest(BaseModel):
@@ -43,6 +45,45 @@ class SubmitLyricsRequest(BaseModel):
         if not 1 <= len(text) <= 5000:
             raise ValueError("請貼上 1 到 5000 字元的歌詞")
         return text
+
+
+class SubtitleLineUpdate(BaseModel):
+    """前端手動字幕編輯器可更新的單句資料。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    start: float
+    end: float
+    text: str
+
+    @field_validator("start", "end")
+    @classmethod
+    def validate_time(cls, value: float) -> float:
+        if not math.isfinite(value) or value < 0:
+            raise ValueError("字幕時間必須是有限且不小於 0 的數字")
+        return value
+
+    @field_validator("text")
+    @classmethod
+    def validate_text(cls, value: str) -> str:
+        text = value.strip()
+        if not 1 <= len(text) <= 500:
+            raise ValueError("每句字幕文字需為 1 到 500 字元")
+        return text
+
+    @model_validator(mode="after")
+    def validate_time_order(self) -> "SubtitleLineUpdate":
+        if self.end < self.start:
+            raise ValueError("字幕結束時間不可早於開始時間")
+        return self
+
+
+class UpdateSubtitlesRequest(BaseModel):
+    """手動字幕更新請求；空的 lines 代表清除字幕。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    lines: list[SubtitleLineUpdate] = Field(default_factory=list, max_length=2000)
 
 
 job_manager = JobManager()
@@ -211,6 +252,42 @@ async def get_subtitles(song_id: str) -> FileResponse:
     if not subtitle_path.is_file():
         raise HTTPException(status_code=404, detail="字幕檔尚未產生")
     return FileResponse(subtitle_path, media_type="application/json; charset=utf-8")
+
+
+@app.put("/api/songs/{song_id}/subtitles")
+async def update_subtitles(song_id: str, request: UpdateSubtitlesRequest) -> dict[str, Any]:
+    """儲存使用者手動整理的字幕，並以原子替換避免讀到半份檔案。"""
+
+    song_dir, meta = _song_meta(song_id)
+    language = meta.get("language")
+    title = meta.get("title")
+    if not isinstance(language, (str, type(None))) or not isinstance(title, str) or not title.strip():
+        raise HTTPException(status_code=500, detail="歌曲 metadata 格式損毀，無法更新字幕")
+
+    lines = [
+        {"start": line.start, "end": line.end, "text": line.text, "words": None}
+        for line in request.lines
+    ]
+    try:
+        subtitles = build_subtitles_json(
+            language=language,
+            title=title,
+            source="manual",
+            lines=lines,
+        )
+    except (TypeError, ValueError, KeyError) as exc:
+        raise HTTPException(status_code=500, detail="字幕資料整理失敗") from exc
+
+    subtitle_path = song_dir / "subtitles.json"
+    temporary_path = song_dir / f".subtitles-{uuid.uuid4().hex}.tmp"
+    try:
+        temporary_path.write_text(json.dumps(subtitles, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        temporary_path.replace(subtitle_path)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail="寫入字幕檔失敗") from exc
+    finally:
+        temporary_path.unlink(missing_ok=True)
+    return subtitles
 
 
 @app.post("/api/songs/{song_id}/lyrics")
