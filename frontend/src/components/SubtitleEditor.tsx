@@ -7,6 +7,7 @@ import {
   FileText,
   Flag,
   LoaderCircle,
+  Pause,
   Play,
   Plus,
   Save,
@@ -276,6 +277,16 @@ export default function SubtitleEditor({
       return current
     })
     commitDraft(nextLines, index + 1 < draftLines.length ? index + 1 : index)
+  }
+
+  const playAudio = () => {
+    void audioRef.current?.play().catch(() => {
+      setActionError('瀏覽器目前無法開始播放，請先點擊播放器一次後再試。')
+    })
+  }
+
+  const pauseAudio = () => {
+    audioRef.current?.pause()
   }
 
   const leaveBlank = (index = selectedIndex) => {
@@ -627,6 +638,26 @@ export default function SubtitleEditor({
                           <span>{line.blank ? '間奏留空白' : `${line.text.length}/500 字`}</span>
                           <span>·</span>
                           <span className="tabular-nums">{formatCueTime(line.start)} → {formatCueTime(line.end)}</span>
+                        </div>
+                        <div className="mt-2 flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={playAudio}
+                            disabled={busy}
+                            className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-emerald-300/25 bg-emerald-500/10 px-2.5 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-45"
+                            aria-label={`播放第 ${index + 1} 句附近的歌曲位置`}
+                          >
+                            <Play size={13} className="fill-current" />播放
+                          </button>
+                          <button
+                            type="button"
+                            onClick={pauseAudio}
+                            disabled={busy}
+                            className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-slate-600 bg-slate-800/75 px-2.5 text-xs font-semibold text-slate-200 transition hover:border-slate-500 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-45"
+                            aria-label="暫停歌曲播放"
+                          >
+                            <Pause size={13} className="fill-current" />暫停
+                          </button>
                         </div>
                       </div>
                     </div>
