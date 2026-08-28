@@ -57,8 +57,8 @@ export default function RecorderPanel({ songId, engine, recordingLocked }: Recor
       const supportedMime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((type) => MediaRecorder.isTypeSupported(type))
       const stream = engine.getRecordStream()
       const recorder = supportedMime
-        ? new MediaRecorder(stream, { mimeType: supportedMime })
-        : new MediaRecorder(stream)
+        ? new MediaRecorder(stream, { mimeType: supportedMime, audioBitsPerSecond: 256_000 })
+        : new MediaRecorder(stream, { audioBitsPerSecond: 256_000 })
       chunksRef.current = []
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) chunksRef.current.push(event.data)
@@ -92,7 +92,7 @@ export default function RecorderPanel({ songId, engine, recordingLocked }: Recor
           </span>
           <div>
             <h2 className="text-sm font-semibold text-white">錄唱</h2>
-            <p className="text-xs text-slate-500">麥克風與 EQ 後伴奏會一起輸出</p>
+            <p className="text-xs text-slate-500">原音模式：保留歌聲細節，麥克風與 EQ 後伴奏會一起輸出</p>
           </div>
         </div>
         {!micReady ? (
@@ -115,6 +115,11 @@ export default function RecorderPanel({ songId, engine, recordingLocked }: Recor
           </button>
         )}
       </div>
+
+      <p className="mt-3 rounded-lg border border-indigo-300/15 bg-indigo-500/5 px-3 py-2 text-xs leading-5 text-slate-400">
+        已啟用低延遲原音模式。藍牙耳機仍可能由硬體額外帶來約 100–300ms 延遲；要抓拍最準，請使用有線或 USB 低延遲耳機。
+        {engine && <span className="ml-1 text-indigo-200">瀏覽器估計輸出緩衝：約 {engine.getEstimatedOutputLatencyMs()}ms。</span>}
+      </p>
 
       <div className="mt-5 rounded-xl border border-white/6 bg-slate-950/45 p-3">
         <div className="flex items-center justify-between text-xs">

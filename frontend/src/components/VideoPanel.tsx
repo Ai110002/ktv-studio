@@ -340,7 +340,9 @@ export default function VideoPanel({ songId, engine, subtitles, audioRef, onReco
         ...engine.getRecordStream().getAudioTracks().map((track) => track.clone()),
       ])
       const mimeType = ['video/mp4', 'video/webm;codecs=vp8,opus'].find((type) => MediaRecorder.isTypeSupported(type))
-      const recorder = mimeType ? new MediaRecorder(combined, { mimeType }) : new MediaRecorder(combined)
+      const recorder = mimeType
+        ? new MediaRecorder(combined, { mimeType, audioBitsPerSecond: 256_000 })
+        : new MediaRecorder(combined, { audioBitsPerSecond: 256_000 })
       chunksRef.current = []
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) chunksRef.current.push(event.data)

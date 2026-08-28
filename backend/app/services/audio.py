@@ -53,7 +53,7 @@ def convert_to_wav(input_path: Path, output_path: Path) -> Path:
 
 
 def convert_to_mp3(input_path: Path, output_path: Path) -> Path:
-    """將瀏覽器錄音轉成 192kbps MP3。"""
+    """將瀏覽器錄音轉成高品質 320kbps MP3。"""
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     _run(
@@ -66,7 +66,7 @@ def convert_to_mp3(input_path: Path, output_path: Path) -> Path:
             "-c:a",
             "libmp3lame",
             "-b:a",
-            "192k",
+            "320k",
             str(output_path),
         ],
         error_prefix="匯出 MP3 失敗",

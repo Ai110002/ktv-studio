@@ -9,6 +9,7 @@ export interface AudioEngine {
   recordDestination: MediaStreamAudioDestinationNode
   resume: () => Promise<void>
   getRecordStream: () => MediaStream
+  getEstimatedOutputLatencyMs: () => number
 }
 
 interface EngineState {
@@ -33,7 +34,9 @@ export function useAudioEngine(audioRef: RefObject<HTMLAudioElement | null>): En
     }
 
     try {
-      const context = new Context()
+      // 明確要求互動模式，優先降低播放與麥克風之間的額外軟體緩衝。
+      // 藍牙耳機本身的傳輸延遲仍由作業系統與耳機硬體決定。
+      const context = new Context({ latencyHint: 'interactive' })
       const source = context.createMediaElementSource(audio)
       const filters = EQ_FREQUENCIES.map((frequency) => {
         const filter = context.createBiquadFilter()
@@ -62,13 +65,19 @@ export function useAudioEngine(audioRef: RefObject<HTMLAudioElement | null>): En
         masterGain,
         recordDestination,
         getRecordStream: () => recordDestination.stream,
+        getEstimatedOutputLatencyMs: () => Math.round(((context.baseLatency || 0) + (context.outputLatency || 0)) * 1000),
         resume: async () => {
           if (context.state !== 'running') await context.resume()
         },
       }
+      const resumeOnPlay = () => {
+        void context.resume()
+      }
+      audio.addEventListener('play', resumeOnPlay)
       setState({ engine, error: null })
 
       return () => {
+        audio.removeEventListener('play', resumeOnPlay)
         source.disconnect()
         filters.forEach((filter) => filter.disconnect())
         masterGain.disconnect()
@@ -143,8 +152,16 @@ export function useMicrophone(engine: AudioEngine | null) {
 
     try {
       await engine.resume()
+      // 錄唱需要保留音色與動態；回音消除、降噪與自動增益是通話用處理，
+      // 會讓歌聲出現抽吸感與失真。使用耳機時可安全關閉它們。
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false },
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+          channelCount: { ideal: 1 },
+          sampleRate: { ideal: 48000 },
+        },
       })
       const source = engine.context.createMediaStreamSource(stream)
       const analyser = engine.context.createAnalyser()
