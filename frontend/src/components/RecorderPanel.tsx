@@ -1,15 +1,16 @@
 import { Circle, Download, Headphones, LoaderCircle, Mic, MicOff, Square, Volume2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { exportRecording } from '../api'
-import { useMicrophone, type AudioEngine } from './AudioEngine'
+import type { AudioEngine, MicrophoneController } from './AudioEngine'
 
 interface RecorderPanelProps {
   songId: string
   engine: AudioEngine | null
+  microphone: MicrophoneController
   recordingLocked: boolean
 }
 
-export default function RecorderPanel({ songId, engine, recordingLocked }: RecorderPanelProps) {
+export default function RecorderPanel({ songId, engine, microphone, recordingLocked }: RecorderPanelProps) {
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const {
@@ -24,7 +25,7 @@ export default function RecorderPanel({ songId, engine, recordingLocked }: Recor
     enable,
     release,
     error: microphoneIssue,
-  } = useMicrophone(engine)
+  } = microphone
   const [recording, setRecording] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [exportUrl, setExportUrl] = useState<string | null>(null)

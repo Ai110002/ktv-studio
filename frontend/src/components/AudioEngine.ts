@@ -17,6 +17,20 @@ interface EngineState {
   error: string | null
 }
 
+export interface MicrophoneController {
+  micReady: boolean
+  micLevel: number
+  micVolume: number
+  setMicVolume: (value: number) => void
+  monitorEnabled: boolean
+  setMonitoring: (enabled: boolean) => void
+  noiseReductionEnabled: boolean
+  setNoiseReduction: (enabled: boolean) => Promise<boolean>
+  enable: () => Promise<boolean>
+  release: () => void
+  error: string | null
+}
+
 /**
  * 將同一個 HTMLAudioElement 只建立一次 MediaElementSource，經過 EQ 後同時送往
  * 喇叭與錄音 destination。字幕及播放控制仍以 audio.currentTime 為唯一時間來源。
@@ -119,7 +133,7 @@ function microphoneError(error: unknown): string {
  * 讓錄音與錄影共用相同的麥克風混音邏輯：麥克風會經過 gain 後送進
  * AudioEngine 的錄製 destination，並持續提供音量表資料。
  */
-export function useMicrophone(engine: AudioEngine | null) {
+export function useMicrophone(engine: AudioEngine | null): MicrophoneController {
   const micChainRef = useRef<MicChain | null>(null)
   const [micReady, setMicReady] = useState(false)
   const [micLevel, setMicLevel] = useState(0)

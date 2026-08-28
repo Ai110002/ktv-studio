@@ -10,7 +10,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { audioUrl, formatDuration, getJob, getSong, getSubtitles, submitLyrics, type Song, type Subtitles } from '../api'
-import { useAudioEngine } from '../components/AudioEngine'
+import { useAudioEngine, useMicrophone } from '../components/AudioEngine'
 import Equalizer from '../components/Equalizer'
 import KTVLyrics from '../components/KTVLyrics'
 import RecorderPanel from '../components/RecorderPanel'
@@ -186,6 +186,7 @@ function StudioWorkspace({
   const navigate = useNavigate()
   const audioRef = useRef<HTMLAudioElement>(null)
   const { engine, error: engineError } = useAudioEngine(audioRef)
+  const microphone = useMicrophone(engine)
   const [playing, setPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(song.duration || 0)
@@ -313,7 +314,7 @@ function StudioWorkspace({
 
       {engineError && <p className="rounded-xl border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{engineError}</p>}
       <div className="grid gap-5 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
-        <VideoPanel songId={song.id} engine={engine} subtitles={subtitles} audioRef={audioRef} onRecordingChange={setVideoRecording} />
+        <VideoPanel songId={song.id} engine={engine} microphone={microphone} subtitles={subtitles} audioRef={audioRef} onRecordingChange={setVideoRecording} />
         <div className="space-y-4">
           <KTVLyrics subtitles={subtitles} audioRef={audioRef} />
           <SubtitleEditor
@@ -328,7 +329,7 @@ function StudioWorkspace({
       </div>
       <div className="grid gap-5 xl:grid-cols-2">
         <Equalizer engine={engine} masterVolume={masterVolume} onMasterVolumeChange={changeMasterVolume} />
-        <RecorderPanel songId={song.id} engine={engine} recordingLocked={videoRecording} />
+        <RecorderPanel songId={song.id} engine={engine} microphone={microphone} recordingLocked={videoRecording} />
       </div>
     </div>
   )

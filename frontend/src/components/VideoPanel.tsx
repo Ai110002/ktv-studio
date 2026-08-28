@@ -1,11 +1,12 @@
 import { Camera, CameraOff, Circle, Download, LoaderCircle, Scissors, Square } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { exportVideo, openInJiaying, type Subtitles } from '../api'
-import { useMicrophone, type AudioEngine } from './AudioEngine'
+import type { AudioEngine, MicrophoneController } from './AudioEngine'
 
 interface VideoPanelProps {
   songId: string
   engine: AudioEngine | null
+  microphone: MicrophoneController
   subtitles: Subtitles | null
   audioRef: RefObject<HTMLAudioElement | null>
   onRecordingChange: (recording: boolean) => void
@@ -110,7 +111,7 @@ function formatRecordingTime(seconds: number): string {
   return `${String(Math.floor(whole / 60)).padStart(2, '0')}:${String(whole % 60).padStart(2, '0')}`
 }
 
-export default function VideoPanel({ songId, engine, subtitles, audioRef, onRecordingChange }: VideoPanelProps) {
+export default function VideoPanel({ songId, engine, microphone, subtitles, audioRef, onRecordingChange }: VideoPanelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const webcamVideoRef = useRef<HTMLVideoElement>(null)
   const webcamStreamRef = useRef<MediaStream | null>(null)
@@ -127,7 +128,7 @@ export default function VideoPanel({ songId, engine, subtitles, audioRef, onReco
   const [error, setError] = useState('')
   const [dragging, setDragging] = useState(false)
   const [settings, setSettings] = useState<VideoSettings>(defaultSettings)
-  const { enable: enableMicrophone, error: microphoneIssue } = useMicrophone(engine)
+  const { enable: enableMicrophone, error: microphoneIssue } = microphone
 
   useEffect(() => {
     try {
